@@ -1,80 +1,54 @@
 """
 Sandboxed CadQuery code executor for CAD Agent.
-Executes LLM-generated CadQuery code safely with timeout and error handling.
+Executes LLM-generated CadQuery code in an ISOLATED subprocess for safety.
+This prevents CadQuery crashes from taking down the main agent process.
 """
 
-import io
+import os
 import sys
+import json
+import tempfile
 import traceback
-from contextlib import redirect_stdout, redirect_stderr
 from typing import Any, Dict, Optional
 import asyncio
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+import multiprocessing as mp
+from multiprocessing import Process, Queue
 
 
-# Try to import CadQuery
-try:
-    import cadquery as cq
-    CADQUERY_AVAILABLE = True
-except ImportError:
-    CADQUERY_AVAILABLE = False
-    cq = None
-
-
-# Thread pool for blocking operations
-_executor = ThreadPoolExecutor(max_workers=2)
-
-
-def _execute_code_sync(
+def _worker_execute(
     code: str,
-    workplane: Optional[Any] = None,
-    context: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
+    step_file_path: Optional[str],
+    result_queue: Queue,
+    error_queue: Queue,
+):
     """
-    Execute CadQuery code synchronously.
-    
-    Args:
-        code: Python/CadQuery code to execute
-        workplane: Optional existing workplane to use
-        context: Optional additional context variables
-        
-    Returns:
-        Execution result with stdout, stderr, result, and any errors
+    Worker function that runs in a separate process.
+    Loads the STEP file and executes the code.
     """
-    if not CADQUERY_AVAILABLE:
-        return {
-            "success": False,
-            "error": "CadQuery is not installed",
-            "stdout": "",
-            "stderr": "",
-            "result": None
-        }
-    
-    stdout_capture = io.StringIO()
-    stderr_capture = io.StringIO()
-    
-    # Build execution context
-    exec_globals = {
-        "cq": cq,
-        "__builtins__": __builtins__,
-    }
-    
-    # Add workplane if provided
-    if workplane is not None:
-        exec_globals["workplane"] = workplane
-        exec_globals["wp"] = workplane  # Shorthand
-    
-    # Add any extra context
-    if context:
-        exec_globals.update(context)
-    
-    exec_locals: Dict[str, Any] = {}
-    
     try:
-        with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-            exec(code, exec_globals, exec_locals)
+        import cadquery as cq
         
-        # Try to extract result
+        # Load workplane from STEP file if provided
+        workplane = None
+        if step_file_path and os.path.exists(step_file_path):
+            workplane = cq.importers.importStep(step_file_path)
+        
+        # Build execution context
+        exec_globals = {
+            "cq": cq,
+            "__builtins__": __builtins__,
+        }
+        
+        if workplane is not None:
+            exec_globals["workplane"] = workplane
+            exec_globals["wp"] = workplane
+        
+        exec_locals: Dict[str, Any] = {}
+        
+        # Execute the code
+        exec(code, exec_globals, exec_locals)
+        
+        # Extract result
         result = exec_locals.get("result", None)
         
         # If no explicit result, look for common variable names
@@ -84,54 +58,21 @@ def _execute_code_sync(
                     result = exec_locals[key]
                     break
         
-        # If still no result, try to serialize any new workplane
-        if result is None and "workplane" in exec_locals:
-            wp = exec_locals["workplane"]
-            if hasattr(wp, "val"):
-                result = _extract_workplane_info(wp)
+        # Make result JSON serializable
+        result = _make_serializable(result)
         
-        return {
+        result_queue.put({
             "success": True,
-            "error": None,
-            "stdout": stdout_capture.getvalue(),
-            "stderr": stderr_capture.getvalue(),
-            "result": _make_serializable(result),
+            "result": result,
             "variables": list(exec_locals.keys())
-        }
+        })
         
     except Exception as e:
-        return {
+        error_queue.put({
             "success": False,
             "error": f"{type(e).__name__}: {str(e)}",
             "traceback": traceback.format_exc(),
-            "stdout": stdout_capture.getvalue(),
-            "stderr": stderr_capture.getvalue(),
-            "result": None
-        }
-
-
-def _extract_workplane_info(wp: Any) -> Dict[str, Any]:
-    """Extract information from a CadQuery workplane."""
-    try:
-        solid = wp.val()
-        bb = solid.BoundingBox()
-        
-        return {
-            "type": "workplane",
-            "bounding_box": {
-                "xmin": bb.xmin, "xmax": bb.xmax,
-                "ymin": bb.ymin, "ymax": bb.ymax,
-                "zmin": bb.zmin, "zmax": bb.zmax,
-                "width": bb.xmax - bb.xmin,
-                "depth": bb.ymax - bb.ymin,
-                "height": bb.zmax - bb.zmin,
-            },
-            "volume": solid.Volume() if hasattr(solid, "Volume") else None,
-            "face_count": len(wp.faces().vals()) if hasattr(wp, "faces") else None,
-            "edge_count": len(wp.edges().vals()) if hasattr(wp, "edges") else None,
-        }
-    except Exception as e:
-        return {"type": "workplane", "error": str(e)}
+        })
 
 
 def _make_serializable(obj: Any) -> Any:
@@ -154,51 +95,125 @@ def _make_serializable(obj: Any) -> Any:
 async def execute_cadquery_code(
     code: str,
     workplane: Optional[Any] = None,
+    step_file_path: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
     timeout_seconds: float = 30.0
 ) -> Dict[str, Any]:
     """
-    Execute CadQuery code asynchronously with timeout.
+    Execute CadQuery code in an ISOLATED subprocess.
+    
+    This prevents CadQuery crashes (segfaults) from affecting the main process.
     
     Args:
         code: Python/CadQuery code to execute
-        workplane: Optional existing workplane to use
-        context: Optional additional context variables
+        workplane: CadQuery workplane (will be saved to temp file)
+        step_file_path: Path to STEP file (alternative to workplane)
+        context: Optional additional context (not currently used in subprocess)
         timeout_seconds: Maximum execution time in seconds
         
     Returns:
         Execution result
     """
-    loop = asyncio.get_event_loop()
+    # If we have a workplane but no file path, export to temp file
+    temp_step = None
+    if workplane is not None and step_file_path is None:
+        try:
+            from cadquery import exporters
+            temp_step = tempfile.NamedTemporaryFile(suffix=".step", delete=False)
+            temp_step.close()
+            exporters.export(workplane, temp_step.name)
+            step_file_path = temp_step.name
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to export workplane: {e}",
+                "result": None
+            }
+    
+    # Create queues for communication
+    result_queue = Queue()
+    error_queue = Queue()
+    
+    # Start worker process
+    process = Process(
+        target=_worker_execute,
+        args=(code, step_file_path, result_queue, error_queue)
+    )
     
     try:
-        result = await asyncio.wait_for(
-            loop.run_in_executor(
-                _executor,
-                _execute_code_sync,
-                code,
-                workplane,
-                context
-            ),
-            timeout=timeout_seconds
+        process.start()
+        
+        # Wait for process with timeout
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: process.join(timeout=timeout_seconds)
         )
-        return result
-    except asyncio.TimeoutError:
-        return {
-            "success": False,
-            "error": f"Execution timed out after {timeout_seconds} seconds",
-            "stdout": "",
-            "stderr": "",
-            "result": None
-        }
+        
+        # Check if process is still running (timeout)
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=5)
+            if process.is_alive():
+                process.kill()
+            return {
+                "success": False,
+                "error": f"Execution timed out after {timeout_seconds} seconds",
+                "result": None
+            }
+        
+        # Check exit code
+        if process.exitcode != 0:
+            # Process crashed (segfault, etc.)
+            if not error_queue.empty():
+                error_data = error_queue.get_nowait()
+                return {
+                    "success": False,
+                    "error": error_data.get("error", f"Process crashed with code {process.exitcode}"),
+                    "traceback": error_data.get("traceback", ""),
+                    "result": None
+                }
+            return {
+                "success": False,
+                "error": f"CadQuery process crashed (exit code: {process.exitcode})",
+                "result": None
+            }
+        
+        # Get result
+        if not result_queue.empty():
+            return result_queue.get_nowait()
+        elif not error_queue.empty():
+            error_data = error_queue.get_nowait()
+            return {
+                "success": False,
+                "error": error_data.get("error", "Unknown error"),
+                "traceback": error_data.get("traceback", ""),
+                "result": None
+            }
+        else:
+            return {
+                "success": False,
+                "error": "No result returned from subprocess",
+                "result": None
+            }
+            
     except Exception as e:
         return {
             "success": False,
-            "error": f"Unexpected error: {type(e).__name__}: {str(e)}",
-            "stdout": "",
-            "stderr": "",
+            "error": f"Subprocess error: {type(e).__name__}: {str(e)}",
             "result": None
         }
+    finally:
+        # Clean up temp file
+        if temp_step and os.path.exists(temp_step.name):
+            try:
+                os.unlink(temp_step.name)
+            except:
+                pass
+        
+        # Ensure process is dead
+        if process.is_alive():
+            process.terminate()
 
 
 # Common analysis code snippets that can be requested
@@ -238,29 +253,34 @@ result = {"surface_area_mm2": solid.Area()}
 # Get face normals
 faces = workplane.faces().vals()
 result = []
-for i, face in enumerate(faces):
-    center = face.Center()
-    normal = face.normalAt()
-    result.append({
-        "face_id": i,
-        "center": {"x": center.x, "y": center.y, "z": center.z},
-        "normal": {"x": normal.x, "y": normal.y, "z": normal.z}
-    })
+for i, face in enumerate(faces[:50]):  # Limit to 50 faces
+    try:
+        center = face.Center()
+        normal = face.normalAt()
+        result.append({
+            "face_id": i,
+            "center": {"x": center.x, "y": center.y, "z": center.z},
+            "normal": {"x": normal.x, "y": normal.y, "z": normal.z}
+        })
+    except:
+        pass
 """,
 }
 
 
 async def run_analysis_snippet(
     snippet_name: str,
-    workplane: Any,
+    workplane: Any = None,
+    step_file_path: str = None,
     timeout_seconds: float = 30.0
 ) -> Dict[str, Any]:
     """
-    Run a predefined analysis snippet.
+    Run a predefined analysis snippet in a subprocess.
     
     Args:
         snippet_name: Name of the snippet to run
         workplane: CadQuery workplane to analyze
+        step_file_path: Path to STEP file (alternative)
         timeout_seconds: Maximum execution time
         
     Returns:
@@ -273,4 +293,9 @@ async def run_analysis_snippet(
         }
     
     code = ANALYSIS_SNIPPETS[snippet_name]
-    return await execute_cadquery_code(code, workplane=workplane, timeout_seconds=timeout_seconds)
+    return await execute_cadquery_code(
+        code, 
+        workplane=workplane, 
+        step_file_path=step_file_path,
+        timeout_seconds=timeout_seconds
+    )
