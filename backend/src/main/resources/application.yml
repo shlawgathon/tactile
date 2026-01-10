@@ -43,6 +43,8 @@ fireworks:
 agent:
   module:
     url: ${AGENT_MODULE_URL:http://localhost:8000}
+  api:
+    key: ${AGENT_API_KEY:}
 
 # Thesys C1 Configuration
 thesys:
