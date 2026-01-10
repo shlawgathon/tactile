@@ -77,7 +77,7 @@ const SideNav = ({ user, userData, title }: SideNavProps) => {
             <div className={`mt-auto p-4 border-t border-gray-200 flex ${collapsed ? 'justify-center' : 'justify-start'}`}>
                 <button
                     onClick={toggleCollapse}
-                    className={`flex items-center text-zinc-400 hover:text-black transition-colors ${collapsed ? 'justify-center w-8 h-8 hover:bg-gray-100 rounded' : 'gap-2 text-sm font-medium'}`}
+                    className={`cursor-pointer flex items-center text-zinc-400 hover:text-black transition-colors ${collapsed ? 'justify-center w-8 h-8 hover:bg-gray-100 rounded' : 'gap-2 text-sm font-medium'}`}
                     title={collapsed ? "Expand" : "Collapse"}
                 >
                     <FontAwesomeIcon icon={collapsed ? faChevronRight : faChevronLeft} className="text-xs" />
