@@ -1,5 +1,7 @@
 import { DM_Mono } from "next/font/google";
 import "./globals.css";
+import { Toaster } from 'react-hot-toast';
+import { WagmiProvider } from '../providers/WagmiProvider';
 
 const dm_mono = DM_Mono({
   weight: ["300", "400", "500"],
@@ -16,7 +18,10 @@ export default function RootLayout({
       <body
         className={`${dm_mono.className} antialiased text-black bg-white bg-[radial-gradient(#2b2b2b_1px,transparent_1px)] [background-size:35px_35px]`}
       >
-        {children}
+        <WagmiProvider>
+          {children}
+        </WagmiProvider>
+        <Toaster position="bottom-right" />
       </body>
     </html>
   );

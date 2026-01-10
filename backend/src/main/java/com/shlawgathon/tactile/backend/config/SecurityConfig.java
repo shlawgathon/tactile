@@ -24,7 +24,7 @@ public class SecurityConfig {
                         // All other requests require authentication
                         .anyRequest().authenticated())
                 .oauth2Login(oauth2 -> oauth2
-                        .defaultSuccessUrl("http://localhost:3000/dashboard", true))
+                        .defaultSuccessUrl("http://localhost:3000/", true))
                 .logout(logout -> logout
                         .logoutSuccessUrl("http://localhost:3000/login")
                         .permitAll());
@@ -37,7 +37,8 @@ public class SecurityConfig {
         org.springframework.web.cors.CorsConfiguration configuration = new org.springframework.web.cors.CorsConfiguration();
         configuration.setAllowedOrigins(java.util.List.of("http://localhost:3000"));
         configuration.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(java.util.List.of("*"));
+        configuration.setAllowedHeaders(java.util.List.of("*", "PAYMENT-SIGNATURE"));
+        configuration.setExposedHeaders(java.util.List.of("PAYMENT-REQUIRED", "PAYMENT-RESPONSE"));
         configuration.setAllowCredentials(true);
         org.springframework.web.cors.UrlBasedCorsConfigurationSource source = new org.springframework.web.cors.UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

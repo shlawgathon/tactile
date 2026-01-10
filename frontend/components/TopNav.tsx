@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faChevronDown, faUser, faSignOut, faCog } from "@fortawesome/free-solid-svg-icons";
 import { logout } from "../services/auth";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 
 interface TopNavProps {
@@ -15,6 +15,13 @@ const TopNav = ({ user }: TopNavProps) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
+    const pathname = usePathname();
+
+    const getTitle = () => {
+        if (pathname === '/') return 'Jobs';
+        if (pathname === '/preferences') return 'Account Preferences';
+        return 'Dashboard';
+    };
 
     const handleLogout = async () => {
         await logout();
@@ -37,7 +44,7 @@ const TopNav = ({ user }: TopNavProps) => {
     return (
         <div className="w-full h-14 border-b border-gray-200 bg-white flex items-center justify-between px-6 z-10 relative">
             <div className="flex items-center gap-4">
-                <span className="text-sm font-medium text-zinc-500">Dashboard</span>
+                <span className="text-sm font-medium text-zinc-500">{getTitle()}</span>
             </div>
 
             <div className="flex items-center gap-3 relative" ref={dropdownRef}>
