@@ -12,10 +12,13 @@ import {
     faPlus,
     faHistory,
     faBolt,
-    faComment
+    faComment,
+    faWifi,
+    faExclamationTriangle
 } from "@fortawesome/free-solid-svg-icons";
 import { Instrument_Sans } from "next/font/google";
 import { getJob, getFileUrl, Job, getJobEvents, AgentEvent } from '../../../../services/jobs';
+import { useJobEvents } from '../../../../hooks/useJobEvents';
 import StepViewer from '../../../../components/StepViewer';
 
 const instrument_sans = Instrument_Sans({
@@ -35,7 +38,10 @@ export default function JobPage() {
 
     // View state
     const [activeTab, setActiveTab] = useState<'chat' | 'feed'>('chat');
-    const [events, setEvents] = useState<AgentEvent[]>([]);
+    const [initialEvents, setInitialEvents] = useState<AgentEvent[]>([]);
+
+    // Use WebSocket for real-time event streaming
+    const { events, isConnected, connectionError } = useJobEvents(id, initialEvents);
 
     useEffect(() => {
         if (id) {
@@ -43,21 +49,10 @@ export default function JobPage() {
                 setJob(data);
                 setLoading(false);
             });
-            // Initial fetch of events
-            getJobEvents(id).then(setEvents);
+            // Initial fetch of events via REST API
+            getJobEvents(id).then(setInitialEvents);
         }
     }, [id]);
-
-    // Poll for events when feed is active
-    useEffect(() => {
-        if (!id || activeTab !== 'feed') return;
-
-        const interval = setInterval(() => {
-            getJobEvents(id).then(setEvents);
-        }, 3000);
-
-        return () => clearInterval(interval);
-    }, [id, activeTab]);
 
     const handleSendMessage = () => {
         if (!inputValue.trim()) return;
@@ -167,6 +162,12 @@ export default function JobPage() {
                                     }`}
                             >
                                 Agent Feed
+                                {activeTab === 'feed' && (
+                                    <span className={`flex items-center gap-1 text-[10px] ${isConnected ? 'text-green-500' : connectionError ? 'text-red-400' : 'text-yellow-500'}`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : connectionError ? 'bg-red-400' : 'bg-yellow-500 animate-pulse'}`}></span>
+                                        {isConnected ? 'Live' : connectionError ? 'Error' : 'Connecting'}
+                                    </span>
+                                )}
                             </button>
                         </div>
 
