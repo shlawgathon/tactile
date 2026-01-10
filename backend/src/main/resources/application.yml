@@ -4,19 +4,19 @@ server:
 spring:
   application:
     name: tactile-backend
-  
+
   data:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/tactile}
       database: ${MONGODB_DATABASE:tactile}
-  
+
   security:
     oauth2:
       client:
         registration:
           github:
-            client-id: ${GITHUB_CLIENT_ID:your-client-id}
-            client-secret: ${GITHUB_CLIENT_SECRET:your-client-secret}
+            client-id: ${GITHUB_CLIENT_ID:Ov23liTxmGpY5xd7PJ1T}
+            client-secret: ${GITHUB_CLIENT_SECRET:84f1eaf4c619759efb006e3eacb0518c8351c19e}
             scope: user:email,read:user
         provider:
           github:
