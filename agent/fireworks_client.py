@@ -42,25 +42,21 @@ class FireworksClient:
             {"role": "user", "content": user_content}
         ]
         
-        # User requested specific payload parameters
+        # Payload matching Fireworks API format
         payload = {
             "model": self.model,
-            "messages": messages,
             "max_tokens": 4096,
             "top_p": 1,
             "top_k": 40,
             "presence_penalty": 0,
             "frequency_penalty": 0,
             "temperature": 0.6,
+            "messages": messages,
         }
         
-        # Add tools if provided (OpenAI compatible format)
+        # Add tools if provided (OpenAI function calling format)
         if mcp_tools:
-            # Minimax / Chat API typically supports tools. 
-            # If the user-provided snippet didn't include tools, we should be careful.
-            # But the agent relies on tools. We'll add them if passed.
             payload["tools"] = mcp_tools
-            # payload["tool_choice"] = "auto" # Some models assume auto if tools present
         
         headers = {
             "Accept": "application/json",
