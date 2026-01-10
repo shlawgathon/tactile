@@ -139,7 +139,7 @@ export default function Dashboard() {
                                     {job.originalFilename}
                                 </div>
                                 <div className="col-span-3 flex items-center gap-2">
-                                    <span className="text-zinc-600 capitalize text-xs font-medium bg-gray-100 px-2 py-0.5 border border-gray-200 rounded-sm">
+                                    <span className="text-zinc-600 capitalize text-xs font-medium bg-gray-100 px-2 py-0.5 border border-gray-200">
                                         {job.status.replace('_', ' ')}
                                     </span>
                                 </div>
