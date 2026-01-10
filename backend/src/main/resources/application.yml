@@ -1,6 +1,10 @@
 server:
   port: 8080
 
+# Frontend URL for OAuth redirects and CORS
+frontend:
+  url: ${FRONTEND_URL:http://localhost:3000}
+
 springdotenv:
   enabled: true
 

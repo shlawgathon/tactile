@@ -1,5 +1,6 @@
 package com.shlawgathon.tactile.backend.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -13,6 +14,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final AgentApiKeyAuthFilter agentApiKeyAuthFilter;
+
+    @Value("${frontend.url:http://localhost:3000}")
+    private String frontendUrl;
 
     public SecurityConfig(AgentApiKeyAuthFilter agentApiKeyAuthFilter) {
         this.agentApiKeyAuthFilter = agentApiKeyAuthFilter;
@@ -32,9 +36,9 @@ public class SecurityConfig {
                         // All other requests require authentication
                         .anyRequest().authenticated())
                 .oauth2Login(oauth2 -> oauth2
-                        .defaultSuccessUrl("http://localhost:3000/", true))
+                        .defaultSuccessUrl(frontendUrl + "/", true))
                 .logout(logout -> logout
-                        .logoutSuccessUrl("http://localhost:3000/login")
+                        .logoutSuccessUrl(frontendUrl + "/login")
                         .permitAll());
 
         return http.build();
@@ -43,7 +47,7 @@ public class SecurityConfig {
     @Bean
     public org.springframework.web.cors.CorsConfigurationSource corsConfigurationSource() {
         org.springframework.web.cors.CorsConfiguration configuration = new org.springframework.web.cors.CorsConfiguration();
-        configuration.setAllowedOrigins(java.util.List.of("http://localhost:3000"));
+        configuration.setAllowedOrigins(java.util.List.of(frontendUrl));
         configuration.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(java.util.List.of("*", "PAYMENT-SIGNATURE"));
         configuration.setExposedHeaders(java.util.List.of("PAYMENT-REQUIRED", "PAYMENT-RESPONSE"));
