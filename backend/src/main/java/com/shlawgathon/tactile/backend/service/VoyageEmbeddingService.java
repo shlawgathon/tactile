@@ -14,6 +14,7 @@ import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Service for generating vector embeddings using Voyage AI.
@@ -56,7 +57,7 @@ public class VoyageEmbeddingService {
             log.warn("Voyage AI API key not configured, returning empty embeddings");
             return texts.stream()
                     .map(t -> new ArrayList<Double>())
-                    .toList();
+                    .collect(Collectors.toUnmodifiableList());
         }
 
         Map<String, Object> requestBody = Map.of(
