@@ -67,19 +67,35 @@ public class X402Service {
      * Build the payment requirement for a given target tier.
      */
     public PaymentRequirement buildPaymentRequirement(SubscriptionTier targetTier) {
-        String price = switch (targetTier) {
-            case PRO -> "$" + proPriceUsd;
-            case ENTERPRISE -> "$" + enterprisePriceUsd;
+        // Get price in USD
+        double priceUsd = switch (targetTier) {
+            case PRO -> Double.parseDouble(proPriceUsd);
+            case ENTERPRISE -> Double.parseDouble(enterprisePriceUsd);
             default -> throw new IllegalArgumentException("Cannot upgrade to FREE tier");
         };
+
+        // Convert to smallest unit (USDC has 6 decimals)
+        // $10.00 -> 10000000
+        long amountInSmallestUnit = (long) (priceUsd * 1_000_000);
+
+        // USDC on Base Sepolia EIP-712 domain parameters
+        String tokenName = "USD Coin";
+        String tokenVersion = "2";
 
         return PaymentRequirement.builder()
                 .scheme("exact")
                 .network(network)
-                .price(price)
+                .price("$" + String.format("%.2f", priceUsd))
+                .maxAmountRequired(String.valueOf(amountInSmallestUnit))
                 .payTo(payToAddress)
                 .asset(asset)
                 .description("Upgrade to " + targetTier.name() + " tier")
+                .name(tokenName)
+                .version(tokenVersion)
+                .extra(PaymentRequirement.Extra.builder()
+                        .name(tokenName)
+                        .version(tokenVersion)
+                        .build())
                 .build();
     }
 

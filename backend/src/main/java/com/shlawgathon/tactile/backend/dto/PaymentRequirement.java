@@ -30,11 +30,32 @@ public class PaymentRequirement {
     @Schema(description = "Wallet address to receive payment")
     private String payTo;
 
-    @Schema(description = "Token asset (e.g., 'USDC')")
+    @Schema(description = "Token asset contract address")
     private String asset;
 
+    @Schema(description = "Maximum amount required in smallest token units (e.g., '10000000' for 10 USDC)")
+    private String maxAmountRequired;
     @Schema(description = "Human-readable description of what the payment is for")
     private String description;
+
+    // EIP-712 domain parameters required for EIP-3009 signing
+    @Schema(description = "Token contract name for EIP-712 domain (e.g., 'USD Coin')")
+    private String name;
+
+    @Schema(description = "Token contract version for EIP-712 domain (e.g., '2')")
+    private String version;
+
+    @Schema(description = "Extra parameters for the payment scheme")
+    private Extra extra;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Extra {
+        private String name;
+        private String version;
+    }
 
     /**
      * Wrapper for x402 PAYMENT-REQUIRED header format.

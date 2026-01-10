@@ -67,7 +67,7 @@ cdp:
   x402:
     pay-to-address: ${X402_PAY_TO_ADDRESS:0xYourAddress}
     network: ${X402_NETWORK:base-sepolia}
-    asset: ${X402_ASSET:USDC}
+    asset: ${X402_ASSET:0x036CbD53842c5426634e7929541eC2318f3dCF7e}
     prices:
       pro: ${X402_PRICE_PRO:10.00}
       enterprise: ${X402_PRICE_ENTERPRISE:99.00}

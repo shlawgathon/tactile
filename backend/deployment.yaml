@@ -50,7 +50,7 @@ metadata:
     nginx.ingress.kubernetes.io/configuration-snippet: |
       real_ip_header CF-Connecting-IP;
       proxy_set_header X-Real-IP $http_cf_connecting_ip;
-    cert-manager.io/cluster-issuer: "cloudflare-issuer"
+    cert-manager.io/cluster-issuer: "tactile3d-cloudflare-issuer"
 spec:
   ingressClassName: nginx
   tls:
