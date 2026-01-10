@@ -10,5 +10,7 @@ public enum AgentEventType {
     THINKING, // Agent's reasoning/thought process
     SUGGESTION, // A suggestion was generated
     ERROR, // An error occurred
-    MEMORY_STORED // Memory was persisted
+    MEMORY_STORED, // Memory was persisted
+    SUCCESS, // Analysis completed successfully
+    GENUI_GEN_SUCCESS // Thesys C1 UI generation completed
 }

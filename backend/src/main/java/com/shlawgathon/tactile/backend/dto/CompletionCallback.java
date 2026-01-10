@@ -52,6 +52,9 @@ public class CompletionCallback {
 
         @Schema(description = "Generated code snippets")
         private List<CodeSnippet> generatedCode;
+
+        @Schema(description = "Markdown analysis report from agent")
+        private String markdownReport;
     }
 
     /**

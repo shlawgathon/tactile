@@ -58,6 +58,12 @@ public class AnalysisResult {
     @Builder.Default
     private List<String> previewImageIds = new ArrayList<>();
 
+    // Agent-generated markdown analysis report
+    private String markdownReport;
+
+    // Thesys C1 UI-converted report (for frontend rendering)
+    private String c1UiReport;
+
     @CreatedDate
     private Instant createdAt;
 }
