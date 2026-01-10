@@ -42,7 +42,7 @@ const TopNav = ({ user }: TopNavProps) => {
     }, []);
 
     return (
-        <div className="w-full h-14 border-b border-gray-200 bg-white flex items-center justify-between px-6 z-10 relative">
+        <div className="w-full h-14 border-b border-gray-200 bg-white flex items-center justify-between px-6 z-50 relative">
             <div className="flex items-center gap-4">
                 <span className="text-sm font-medium text-zinc-500">{getTitle()}</span>
             </div>

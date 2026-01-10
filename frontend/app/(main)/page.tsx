@@ -71,7 +71,7 @@ export default function Dashboard() {
     };
 
     return (
-        <div className="w-full h-full flex flex-col gap-8">
+        <div className="w-full h-full flex flex-col gap-8 max-w-4xl mx-auto">
             <div className="flex flex-col tracking-">
                 <h1 className={`${instrument_sans.className} text-2xl font-semibold`}>Get Started</h1>
                 <p className="text-zinc-500 text-sm">Import your stems to start working</p>
