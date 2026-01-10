@@ -37,6 +37,13 @@ agent:
   module:
     url: ${AGENT_MODULE_URL:http://localhost:8000}
 
+# Thesys C1 Configuration
+thesys:
+  api:
+    url: ${THESYS_API_URL:https://api.thesys.dev/v1/embed/chat/completions}
+    key: ${THESYS_API_KEY:your-thesys-api-key}
+    model: ${THESYS_MODEL:c1/anthropic/claude-sonnet-4/v-20250617}
+
 # OpenAPI Configuration
 springdoc:
   api-docs:
