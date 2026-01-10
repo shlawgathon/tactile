@@ -17,7 +17,7 @@ import {
     faExclamationTriangle
 } from "@fortawesome/free-solid-svg-icons";
 import { Instrument_Sans } from "next/font/google";
-import { getJob, getFileUrl, Job, getJobEvents, AgentEvent } from '../../../../services/jobs';
+import { getJob, getFileUrl, Job, getJobEvents, AgentEvent, queryJobMemory } from '../../../../services/jobs';
 import { useJobEvents } from '../../../../hooks/useJobEvents';
 import StepViewer from '../../../../components/StepViewer';
 
@@ -35,6 +35,7 @@ export default function JobPage() {
     // Chat state
     const [messages, setMessages] = useState<{ role: 'user' | 'ai', content: string }[]>([]);
     const [inputValue, setInputValue] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
     // View state
     const [activeTab, setActiveTab] = useState<'chat' | 'feed'>('chat');
@@ -54,15 +55,36 @@ export default function JobPage() {
         }
     }, [id]);
 
-    const handleSendMessage = () => {
-        if (!inputValue.trim()) return;
-        setMessages([...messages, { role: 'user', content: inputValue }]);
-        setInputValue('');
+    const handleSendMessage = async () => {
+        if (!inputValue.trim() || isLoading) return;
 
-        // Mock response
-        setTimeout(() => {
-            setMessages(prev => [...prev, { role: 'ai', content: "I'm currently in read-only mode, but I can see your message!" }]);
-        }, 1000);
+        const userMessage = inputValue.trim();
+        setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+        setInputValue('');
+        setIsLoading(true);
+
+        try {
+            const response = await queryJobMemory(id, userMessage);
+            if (response) {
+                setMessages(prev => [...prev, {
+                    role: 'ai',
+                    content: response.answer + (response.sourcesUsed > 0 ? `\n\n📚 Based on ${response.sourcesUsed} source${response.sourcesUsed > 1 ? 's' : ''} from the analysis.` : '')
+                }]);
+            } else {
+                setMessages(prev => [...prev, {
+                    role: 'ai',
+                    content: "Sorry, I couldn't process your question. Please try again."
+                }]);
+            }
+        } catch (error) {
+            console.error("Chat error:", error);
+            setMessages(prev => [...prev, {
+                role: 'ai',
+                content: "An error occurred while processing your question."
+            }]);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     if (loading) {
@@ -212,6 +234,17 @@ export default function JobPage() {
                                             </div>
                                         </div>
                                     ))}
+                                    {isLoading && (
+                                        <div className="p-6 border-b border-gray-50 flex flex-col gap-2 bg-zinc-50/50">
+                                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
+                                                Tactile AI
+                                            </span>
+                                            <div className="flex items-center gap-2 text-sm text-zinc-500">
+                                                <FontAwesomeIcon icon={faSpinner} className="animate-spin text-primary" />
+                                                <span>Thinking...</span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 

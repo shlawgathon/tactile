@@ -131,3 +131,35 @@ export const getJobEvents = async (jobId: string): Promise<AgentEvent[]> => {
         return [];
     }
 };
+
+export interface QueryResponse {
+    answer: string;
+    sourcesUsed: number;
+}
+
+/**
+ * Query the job's memory using RAG-based chat.
+ * This allows users to ask questions about their CAD model analysis.
+ */
+export const queryJobMemory = async (jobId: string, query: string): Promise<QueryResponse | null> => {
+    try {
+        const response = await fetch(`${API_URL}/jobs/${jobId}/query`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ query }),
+            credentials: 'include',
+        });
+
+        if (!response.ok) {
+            console.error("Query failed", await response.text());
+            return null;
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error("Error querying job memory:", error);
+        return null;
+    }
+};

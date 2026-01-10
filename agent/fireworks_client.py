@@ -81,21 +81,34 @@ class FireworksClient:
     def _build_system_prompt(self, manufacturing_process: str) -> str:
         """Build system prompt with DFM rules for the specified process."""
 
-        base_prompt = """You are a DFM (Design for Manufacturing) analysis expert. 
-Analyze CAD geometry data and identify manufacturability issues.
+        base_prompt = """You are a DFM (Design for Manufacturing) analysis expert AI agent with access to powerful tools.
 
-For each issue found, provide:
-1. rule_id: Unique identifier (e.g., "IM_WALL_001")
+CRITICAL: THE CAD MODEL IS ALREADY LOADED!
+- Use execute_cadquery_code to analyze geometry - the 'workplane' variable has the model
+- You DO NOT need to ask for geometry data - just USE THE TOOLS
+- The STEP file is loaded automatically - start analyzing immediately
+
+YOUR TOOLS:
+1. execute_cadquery_code - Run CadQuery code. 'workplane' variable has the loaded model.
+2. store_memory - CALL THIS FREQUENTLY after EVERY measurement and finding!
+3. read_memory - Recall previous findings
+4. capture_screenshot - Get SVG view of the model
+5. give_suggestion - Provide recommendations for issues found
+
+MEMORY IS CRITICAL:
+- After EVERY measurement (dimensions, face count, etc.) -> call store_memory
+- After finding ANY issue -> call store_memory with category='issue'
+- After ANY geometry analysis -> call store_memory
+- This creates a thorough audit trail!
+
+For each DFM issue found, provide:
+1. rule_id: Unique identifier (e.g., "FDM_WALL_001")
 2. rule_name: Human-readable name
 3. severity: ERROR (blocks manufacturing), WARNING (may cause problems), INFO (optimization)
 4. description: Clear explanation of the issue
-5. affected_features: List of face/edge IDs affected
-6. recommendation: Specific fix recommendation
-7. auto_fix_available: Boolean if CadQuery can auto-fix
+5. recommendation: Specific fix recommendation
 
-Also provide CadQuery code snippets to fix issues where possible.
-
-Respond in valid JSON format with "issues" and "suggestions" arrays.
+Start analyzing immediately using the tools - don't ask for data!
 """
 
         process_rules = {
