@@ -38,6 +38,9 @@ dependencies {
     // .env file support
     implementation("me.paulschwarz:spring-dotenv:4.0.0")
 
+    // Sentry for error tracking
+    implementation("io.sentry:sentry-spring-boot-starter-jakarta:7.21.0")
+
     // Lombok
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")

@@ -74,6 +74,13 @@ springdoc:
     operationsSorter: method
     tagsSorter: alpha
 
+# Sentry Configuration
+sentry:
+  dsn: ${SENTRY_DSN:}
+  environment: ${SENTRY_ENVIRONMENT:development}
+  traces-sample-rate: ${SENTRY_TRACES_SAMPLE_RATE:1.0}
+  exception-resolver-order: -2147483647
+
 # Logging
 logging:
   level:
