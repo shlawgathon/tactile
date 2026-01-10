@@ -164,3 +164,13 @@ logs/
 *.class
 *.jar
 *.war
+
+### Screenshots ###
+screenshots/
+
+### Planning ###
+.planning/
+planning/
+
+### STEP ###
+*.step
