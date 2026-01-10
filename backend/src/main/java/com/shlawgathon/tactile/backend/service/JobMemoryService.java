@@ -111,27 +111,47 @@ public class JobMemoryService {
                 return getMemories(jobId).stream().limit(limit).collect(Collectors.toList());
             }
 
-            // Use MongoDB vector search aggregation
-            // This requires a vector search index to be configured on the collection
-            String vectorSearchStage = String.format("""
-                    {
-                      "$vectorSearch": {
-                        "index": "memory_vector_index",
-                        "path": "embedding",
-                        "queryVector": %s,
-                        "numCandidates": %d,
-                        "limit": %d,
-                        "filter": { "jobId": "%s" }
-                      }
-                    }
-                    """, queryEmbedding.toString(), limit * 10, limit, jobId);
+            // Use MongoDB Atlas Vector Search aggregation pipeline
+            // Requires a vector search index named "memory_vector_index" on job_memories
+            // collection
+            org.bson.Document vectorSearchStage = new org.bson.Document("$vectorSearch",
+                    new org.bson.Document()
+                            .append("index", "memory_vector_index")
+                            .append("path", "embedding")
+                            .append("queryVector", queryEmbedding)
+                            .append("numCandidates", limit * 10)
+                            .append("limit", limit)
+                            .append("filter", new org.bson.Document("jobId", jobId)));
 
-            // For now, fall back to regular query if vector search isn't available
-            log.debug("Vector search query constructed for job: {}", jobId);
-            return getMemories(jobId).stream().limit(limit).collect(Collectors.toList());
+            List<org.bson.Document> pipeline = List.of(vectorSearchStage);
+
+            List<JobMemory> results = mongoTemplate.getCollection("job_memories")
+                    .aggregate(pipeline, org.bson.Document.class)
+                    .map(doc -> {
+                        JobMemory memory = new JobMemory();
+                        memory.setId(doc.getString("_id"));
+                        memory.setJobId(doc.getString("jobId"));
+                        memory.setContent(doc.getString("content"));
+                        memory.setCategory(doc.getString("category"));
+                        memory.setMetadata(doc.get("metadata", Map.class));
+                        memory.setCreatedAt(doc.getDate("createdAt") != null
+                                ? doc.getDate("createdAt").toInstant()
+                                : null);
+                        return memory;
+                    })
+                    .into(new java.util.ArrayList<>());
+
+            log.info("Vector search found {} memories for job: {}", results.size(), jobId);
+
+            if (results.isEmpty()) {
+                log.warn("Vector search returned no results, falling back to all memories");
+                return getMemories(jobId).stream().limit(limit).collect(Collectors.toList());
+            }
+
+            return results;
 
         } catch (Exception e) {
-            log.error("Error performing vector search: {}", e.getMessage());
+            log.error("Error performing vector search, falling back to all memories: {}", e.getMessage());
             return getMemories(jobId).stream().limit(limit).collect(Collectors.toList());
         }
     }
