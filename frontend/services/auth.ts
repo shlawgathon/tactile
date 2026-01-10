@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:8080/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
 
 export const getCurrentUser = async () => {
     try {
@@ -23,7 +23,7 @@ export const getCurrentUser = async () => {
 
 export const logout = async () => {
     try {
-        await fetch('http://localhost:8080/logout', {
+        await fetch(`${API_URL.replace('/api', '')}/logout`, {
             method: 'POST',
             credentials: 'include',
         });
