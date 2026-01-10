@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Instrument_Sans } from "next/font/google";
-import { getCurrentUser } from "../../services/auth";
+import { getCurrentUser } from "../../../services/auth";
 import { faGithub } from '@fortawesome/free-brands-svg-icons';
 
 const instrument_sans = Instrument_Sans({
