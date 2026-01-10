@@ -15,13 +15,18 @@
     "@fortawesome/react-fontawesome": "^3.1.1",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
+    "@tanstack/react-query": "^5.90.16",
     "@types/three": "^0.182.0",
+    "@x402/evm": "^2.2.0",
+    "@x402/fetch": "^2.2.0",
     "next": "16.1.1",
     "occt-import-js": "^0.0.23",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-hot-toast": "^2.6.0",
-    "three": "^0.182.0"
+    "three": "^0.182.0",
+    "viem": "^2.44.1",
+    "wagmi": "^3.3.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
