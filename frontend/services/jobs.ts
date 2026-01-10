@@ -7,7 +7,12 @@ export interface Job {
     createdAt: string;
     manufacturingProcess: string;
     progressPercent: number;
+    fileStorageId: string;
 }
+
+export const getFileUrl = (fileId: string) => {
+    return `${API_URL}/files/${fileId}`;
+};
 
 export const uploadFile = async (file: File): Promise<string | null> => {
     const formData = new FormData();
@@ -58,6 +63,24 @@ export const createJob = async (fileId: string, filename: string): Promise<Job |
         return await response.json();
     } catch (error) {
         console.error("Error creating job:", error);
+        return null;
+    }
+};
+
+export const getJob = async (id: string): Promise<Job | null> => {
+    try {
+        const response = await fetch(`${API_URL}/jobs/${id}`, {
+            method: 'GET',
+            credentials: 'include',
+        });
+
+        if (!response.ok) {
+            return null;
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching job:", error);
         return null;
     }
 };

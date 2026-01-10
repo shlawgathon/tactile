@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUpload, faFileCode, faSpinner } from "@fortawesome/free-solid-svg-icons";
 import { Instrument_Sans } from "next/font/google";
@@ -85,11 +86,13 @@ export default function Dashboard() {
                 onClick={handleClick}
             >
                 {uploading && (
-                    <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10 backdrop-blur-sm">
-                        <div className="flex flex-col items-center gap-2">
-                            <FontAwesomeIcon icon={faSpinner} className="text-3xl text-primary animate-spin" />
-                            <span className="text-sm font-medium text-zinc-600">Uploading & Processing...</span>
+                    <div className="absolute inset-0 bg-white/90 flex flex-col items-center justify-center z-10 backdrop-blur-md">
+                        <div className="relative w-10 h-10 mb-3">
+                            <div className="absolute inset-0 border-4 border-zinc-100 rounded-full"></div>
+                            <div className="absolute inset-0 border-4 border-t-primary border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
                         </div>
+                        <span className="text-sm font-semibold tracking-wide text-zinc-800">UPLOADING</span>
+                        <span className="text-xs text-zinc-400">Processing your file...</span>
                     </div>
                 )}
 
@@ -110,7 +113,7 @@ export default function Dashboard() {
             </div>
 
             <div className="flex flex-col gap-4">
-                <h2 className={`${instrument_sans.className} text-lg font-semibold`}>Recent Files</h2>
+                <h2 className={`${instrument_sans.className} text-lg font-semibold`}>Recent Jobs</h2>
 
                 {jobs.length === 0 ? (
                     <div className="w-full py-12 text-center border border-dashed border-zinc-200 bg-gray-50 text-zinc-400 text-sm">
@@ -128,7 +131,7 @@ export default function Dashboard() {
 
                         {/* Rows */}
                         {jobs.map((job) => (
-                            <div key={job.id} className="grid grid-cols-12 px-6 py-4 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors items-center text-sm">
+                            <Link href={`/jobs/${job.id}`} key={job.id} className="grid grid-cols-12 px-6 py-4 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors items-center text-sm cursor-pointer no-underline">
                                 <div className="col-span-5 flex items-center gap-3 font-medium text-zinc-800">
                                     <div className="w-8 h-8 flex items-center justify-center bg-gray-100 border border-gray-200 text-zinc-500">
                                         <FontAwesomeIcon icon={faFileCode} className="text-xs" />
@@ -146,7 +149,7 @@ export default function Dashboard() {
                                 <div className="col-span-2 text-right text-zinc-400 text-xs font-mono">
                                     {new Date(job.createdAt).toLocaleDateString()}
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                     </div>
                 )}
