@@ -16,11 +16,10 @@ const instrument_sans = Instrument_Sans({
 interface SideNavProps {
     user: any;
     userData: any;
-    projects: any[];
     title: string;
 }
 
-const SideNav = ({ user, userData, projects, title }: SideNavProps) => {
+const SideNav = ({ user, userData, title }: SideNavProps) => {
     const router = useRouter();
     const pathname = usePathname();
 
@@ -37,47 +36,19 @@ const SideNav = ({ user, userData, projects, title }: SideNavProps) => {
             </div>
 
             <div className="flex flex-col w-full justify-center px-6 py-5 border-b border-gray-200 gap-2">
-                <h1 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Projects</h1>
+                <h1 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Jobs</h1>
                 <Link href="/" className={linkClasses(pathname === "/")}>
-                    All Projects
+                    All Jobs
                 </Link>
-                {projects.map(project => {
+                {/* {projects.map(project => {
                     const href = `/project/${project.id}`;
                     return (
                         <Link key={project.id} href={href} className={linkClasses(pathname === href)}>
                             {project.name}
                         </Link>
                     );
-                })}
+                })} */}
             </div>
-
-            {/* {Array.isArray(orgs) && orgs.length > 0 && (
-                <div className="flex flex-col w-full justify-center px-6 py-5 border-b border-gray-200 gap-2">
-                    <h1 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Organizations</h1>
-                    {orgs.map(org => {
-                        const href = `/orgs/${org.id}`;
-                        return (
-                            <Link key={org.id} href={href} className={linkClasses(pathname === href)}>
-                                {org.name}
-                            </Link>
-                        );
-                    })}
-                </div>
-            )} */}
-
-            {/* {Array.isArray(invites) && invites.length > 0 && (
-                <div className="flex flex-col w-full justify-center px-6 py-5 border-b border-gray-200 gap-2">
-                    <div className="flex flex-row items-center gap-2 mb-1">
-                        <h1 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Invites</h1>
-                        <div className="rounded-none bg-red-500 text-white text-[10px] px-1 font-bold h-4 flex items-center justify-center">{invites.length}</div>
-                    </div>
-                    {invites.map(invite => (
-                        <Link key={invite.id} href={`/invite/${invite.id}`} className="text-sm tracking-wide font-medium text-zinc-600 hover:text-black">
-                            {invite.orgName}
-                        </Link>
-                    ))}
-                </div>
-            )} */}
 
             <div className="flex flex-col w-full justify-center px-6 py-5 border-b border-gray-200 gap-2">
                 <h1 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Account</h1>
@@ -95,13 +66,6 @@ const SideNav = ({ user, userData, projects, title }: SideNavProps) => {
                     API Reference
                 </Link>
             </div>
-
-            {/* <div className="flex flex-col w-full justify-center px-6 py-5 border-b border-gray-200 gap-2 mt-auto">
-                <button onClick={handleLogout} className="flex flex-row text-sm items-center text-zinc-500 hover:text-black hover:cursor-pointer transition-colors">
-                    <FontAwesomeIcon icon={faSignOut} className="mr-3" />
-                    <p>Log out</p>
-                </button>
-            </div> */}
         </div>
     );
 };

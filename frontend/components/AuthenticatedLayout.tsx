@@ -36,16 +36,9 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
         fetchUser();
     }, [router]);
 
-    const projects = [
-        { id: "1", name: "Tactile" },
-        { id: "2", name: "Engineering" }
-    ];
-
-    // Render the shell immediately with a loading state or the real user
-    // This prevents the "white screen" flash
     return (
         <div className={`${dm_mono.className} flex h-screen w-full bg-white text-black font-sans selection:bg-zinc-200 overflow-hidden`}>
-            <SideNav user={user || {}} userData={{}} projects={projects} title="Tactile" />
+            <SideNav user={user || {}} userData={{}} title="Tactile" />
             <div className="flex flex-col flex-1 h-full min-w-0">
                 <TopNav user={user || {}} />
                 <main className="flex-1 overflow-y-auto bg-gray-50 p-6 scrollbar-thin scrollbar-thumb-zinc-300 scrollbar-track-transparent">
