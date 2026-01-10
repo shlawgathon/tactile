@@ -66,7 +66,7 @@ public class PaymentRequirement {
     @AllArgsConstructor
     public static class PaymentRequiredResponse {
         private int x402Version;
-        private List<PaymentRequirement> accepts;
+        private List<PaymentRequirement> paymentRequirements;
         private String error;
     }
 }
