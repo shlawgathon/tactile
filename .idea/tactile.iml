@@ -2,7 +2,7 @@
 <module type="JAVA_MODULE" version="4">
   <component name="FacetManager">
     <facet type="Python" name="Python">
-      <configuration sdkName="uv (untitled)" />
+      <configuration sdkName="Python 3.13 (f25-hw9-GrowlyX)" />
     </facet>
   </component>
   <component name="NewModuleRootManager" inherit-compiler-output="true">
@@ -12,6 +12,6 @@
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="library" name="uv (untitled) interpreter library" level="application" />
+    <orderEntry type="library" name="Python 3.13 (f25-hw9-GrowlyX) interpreter library" level="application" />
   </component>
 </module>
