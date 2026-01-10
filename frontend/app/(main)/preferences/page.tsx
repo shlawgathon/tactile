@@ -132,7 +132,7 @@ export default function PreferencesPage() {
                     {/* Enterprise Plan */}
                     <div className="flex flex-col bg-white border border-gray-200 border-t-4 border-t-purple-600 p-6 h-full shadow-sm">
                         <h3 className={`${instrument_sans.className} text-xl font-medium mb-1 text-purple-600`}>Enterprise</h3>
-                        <div className="text-3xl font-bold mb-6">Contact</div>
+                        <div className="text-3xl font-bold mb-6">$99<span className="text-sm font-normal text-zinc-500">/mo</span></div>
 
                         <div className="flex flex-col gap-3 mb-8 flex-1">
                             <p className="text-sm text-zinc-600">For large teams and organizations.</p>
@@ -152,7 +152,7 @@ export default function PreferencesPage() {
                             </ul>
                         </div>
 
-                        <button className="cursor-pointer text-sm font-medium w-full py-2 border border-purple-600 text-purple-600 hover:bg-purple-50 transition-colors">Contact Sales</button>
+                        <button className="cursor-pointer text-sm font-medium w-full py-2 border border-purple-600 text-purple-600 hover:bg-purple-50 transition-colors">Upgrade to Enterprise</button>
                     </div>
                 </div>
             </div>
