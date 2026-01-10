@@ -301,7 +301,8 @@ class BackendClient:
         job_id: str,
         issues: List[Dict[str, Any]],
         suggestions: List[Dict[str, Any]],
-        geometry_summary: Optional[Dict[str, Any]] = None
+        geometry_summary: Optional[Dict[str, Any]] = None,
+        markdown_report: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Mark the job as completed with results.
@@ -311,6 +312,7 @@ class BackendClient:
             issues: List of identified issues
             suggestions: List of suggestions
             geometry_summary: Optional geometry data
+            markdown_report: Optional markdown analysis report
         """
         await self.connect()
         
@@ -320,7 +322,8 @@ class BackendClient:
                 "geometrySummary": geometry_summary,
                 "issues": issues,
                 "suggestions": suggestions,
-                "generatedCode": []
+                "generatedCode": [],
+                "markdownReport": markdown_report
             },
             "outputFiles": {}
         }

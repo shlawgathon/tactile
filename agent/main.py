@@ -262,13 +262,22 @@ async def start_job(request: StartJobRequest, background_tasks: BackgroundTasks)
     3. Starts the analysis agent in a background task
     4. Posts events back to the backend via HTTP (which broadcasts via WebSocket)
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"[AGENT] Received start job request: jobId={request.jobId}")
+    logger.info(f"[AGENT] FileUrl: {request.fileUrl}")
+    logger.info(f"[AGENT] Process: {request.manufacturingProcess}, Material: {request.material}")
+    
     if not CAD_AGENT_AVAILABLE:
+        logger.error("[AGENT] CAD Agent not available!")
         raise HTTPException(
             status_code=503,
             detail="CAD Agent not available"
         )
     
     # Start the analysis as a background task
+    logger.info(f"[AGENT] Starting background analysis task for job: {request.jobId}")
     background_tasks.add_task(
         run_analysis_job,
         job_id=request.jobId,
@@ -433,14 +442,23 @@ async def run_analysis_job(
             except Exception as e:
                 logger.warning(f"Failed to extract geometry summary: {e}")
         
-        # Complete the job
+        # Generate markdown report
+        markdown_report = generate_markdown_report(
+            issues=[],  # Convert from collected data if available
+            suggestions=suggestions,
+            geometry_summary=None,  # Would need model conversion
+            manufacturing_process=manufacturing_process,
+        )
+        
+        # Complete the job with markdown report
         if backend_client:
             await backend_client.update_job_status(job_id, "VALIDATE", 3)
             await backend_client.complete_job(
                 job_id=job_id,
                 issues=issues,
                 suggestions=suggestions,
-                geometry_summary=geometry_summary
+                geometry_summary=geometry_summary,
+                markdown_report=markdown_report
             )
             
             await backend_client.post_event(

@@ -1,6 +1,5 @@
 package com.shlawgathon.tactile.backend.dto;
 
-import com.shlawgathon.tactile.backend.model.ManufacturingProcess;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * Request to start a job on the Agent Module.
+ * Field names match Python agent's Pydantic model exactly.
  */
 @Data
 @Builder
@@ -23,8 +23,8 @@ public class StartJobRequest {
     @Schema(description = "URL to download the STEP file")
     private String fileUrl;
 
-    @Schema(description = "Manufacturing process for analysis")
-    private ManufacturingProcess manufacturingProcess;
+    @Schema(description = "Manufacturing process for analysis (as string)")
+    private String manufacturingProcess;
 
     @Schema(description = "Material type (optional)")
     private String material;

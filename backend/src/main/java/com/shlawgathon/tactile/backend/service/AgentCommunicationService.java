@@ -32,7 +32,10 @@ public class AgentCommunicationService {
     private String serverPort;
 
     public AgentCommunicationService(FileStorageService fileStorageService, ObjectMapper objectMapper) {
-        this.httpClient = HttpClient.newHttpClient();
+        // Force HTTP/1.1 - Uvicorn doesn't support HTTP/2 upgrade
+        this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .build();
         this.objectMapper = objectMapper;
         this.fileStorageService = fileStorageService;
     }
@@ -45,15 +48,21 @@ public class AgentCommunicationService {
             StartJobRequest request = StartJobRequest.builder()
                     .jobId(job.getId())
                     .fileUrl(fileStorageService.getFileUrl(job.getFileStorageId()))
-                    .manufacturingProcess(job.getManufacturingProcess())
+                    .manufacturingProcess(job.getManufacturingProcess() != null
+                            ? job.getManufacturingProcess().name()
+                            : "FDM_3D_PRINTING")
                     .material(job.getMaterial())
                     .callbackUrl(getCallbackUrl(job.getId()))
                     .resumeFromCheckpoint(null)
                     .build();
 
+            log.info("[AGENT START] Job: {} | FileUrl: {} | Process: {}",
+                    job.getId(), request.getFileUrl(), request.getManufacturingProcess());
+
             sendToAgent("/agent/jobs/start", request);
         } catch (Exception e) {
-            log.error("Failed to start job on agent module: {}", job.getId(), e);
+            log.error("[AGENT START] Failed to start job: {} - {}", job.getId(), e.getMessage(), e);
+            throw new RuntimeException("Failed to start agent job: " + e.getMessage(), e);
         }
     }
 
@@ -65,7 +74,9 @@ public class AgentCommunicationService {
             StartJobRequest.StartJobRequestBuilder builder = StartJobRequest.builder()
                     .jobId(job.getId())
                     .fileUrl(fileStorageService.getFileUrl(job.getFileStorageId()))
-                    .manufacturingProcess(job.getManufacturingProcess())
+                    .manufacturingProcess(job.getManufacturingProcess() != null
+                            ? job.getManufacturingProcess().name()
+                            : "FDM_3D_PRINTING")
                     .material(job.getMaterial())
                     .callbackUrl(getCallbackUrl(job.getId()));
 
@@ -108,18 +119,30 @@ public class AgentCommunicationService {
 
     private void sendToAgent(String path, Object body) throws Exception {
         String jsonBody = objectMapper.writeValueAsString(body);
+        String fullUrl = agentModuleUrl + path;
+
+        log.info("[AGENT HTTP] Sending request to: {}", fullUrl);
+        log.info("[AGENT HTTP] Request body: {}", jsonBody);
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(agentModuleUrl + path))
+                .uri(URI.create(fullUrl))
                 .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                 .build();
 
         httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenAccept(response -> {
-                    if (response.statusCode() != 200 && response.statusCode() != 202) {
-                        log.warn("Agent module returned status: {} for path: {}", response.statusCode(), path);
+                    if (response.statusCode() == 200 || response.statusCode() == 202) {
+                        log.info("[AGENT HTTP] Success for path: {}", path);
+                    } else {
+                        log.warn("[AGENT HTTP] Error status: {} for path: {}, body: {}",
+                                response.statusCode(), path, response.body());
                     }
+                })
+                .exceptionally(e -> {
+                    log.error("[AGENT HTTP] Failed to communicate with agent at {}: {}", fullUrl, e.getMessage());
+                    return null;
                 });
     }
 

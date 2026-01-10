@@ -116,9 +116,7 @@ export interface AgentEvent {
 
 export const getJobEvents = async (jobId: string): Promise<AgentEvent[]> => {
     try {
-        // Construct internal URL by removing '/api' suffix if present
-        const baseUrl = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
-        const response = await fetch(`${baseUrl}/internal/jobs/${jobId}/events`, {
+        const response = await fetch(`${API_URL}/jobs/${jobId}/events`, {
             method: 'GET',
             credentials: 'include',
         });

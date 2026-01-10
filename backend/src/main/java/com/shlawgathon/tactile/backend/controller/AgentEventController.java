@@ -23,6 +23,8 @@ import java.util.List;
 @Hidden
 public class AgentEventController {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AgentEventController.class);
+
     private final AgentEventService agentEventService;
 
     public AgentEventController(AgentEventService agentEventService) {
@@ -35,12 +37,29 @@ public class AgentEventController {
             @PathVariable String jobId,
             @RequestBody AgentEventRequest request) {
 
+        log.info("[AGENT EVENT] Job: {} | Type: {} | Title: {}",
+                jobId, request.getType(), request.getTitle());
+        log.info("[AGENT EVENT] Job: {} | Content: {}",
+                jobId, truncate(request.getContent(), 200));
+
+        if (request.getMetadata() != null && !request.getMetadata().isEmpty()) {
+            log.info("[AGENT EVENT] Job: {} | Metadata keys: {}",
+                    jobId, request.getMetadata().keySet());
+        }
+
         if (request.getType() == null) {
+            log.warn("[AGENT EVENT] Job: {} | Missing event type!", jobId);
             return ResponseEntity.badRequest().build();
         }
 
         AgentEvent event = agentEventService.createEvent(jobId, request);
         return ResponseEntity.ok(agentEventService.toResponse(event));
+    }
+
+    private String truncate(String s, int maxLen) {
+        if (s == null)
+            return "null";
+        return s.length() > maxLen ? s.substring(0, maxLen) + "..." : s;
     }
 
     @GetMapping

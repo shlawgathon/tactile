@@ -6,6 +6,7 @@ import com.shlawgathon.tactile.backend.model.AgentEvent;
 import com.shlawgathon.tactile.backend.model.AgentEventType;
 import com.shlawgathon.tactile.backend.repository.AgentEventRepository;
 import com.shlawgathon.tactile.backend.websocket.JobWebSocketHandler;
+import com.shlawgathon.tactile.backend.websocket.PublicJobWebSocketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -24,11 +25,14 @@ public class AgentEventService {
 
     private final AgentEventRepository agentEventRepository;
     private final JobWebSocketHandler webSocketHandler;
+    private final PublicJobWebSocketHandler publicWebSocketHandler;
 
     public AgentEventService(AgentEventRepository agentEventRepository,
-            JobWebSocketHandler webSocketHandler) {
+            JobWebSocketHandler webSocketHandler,
+            PublicJobWebSocketHandler publicWebSocketHandler) {
         this.agentEventRepository = agentEventRepository;
         this.webSocketHandler = webSocketHandler;
+        this.publicWebSocketHandler = publicWebSocketHandler;
     }
 
     /**
@@ -44,6 +48,8 @@ public class AgentEventService {
      */
     public AgentEvent createEvent(String jobId, AgentEventType type, String title,
             String content, Map<String, Object> metadata) {
+        log.info("[AGENT] Creating event for job: {} | Type: {} | Title: {}", jobId, type, title);
+
         AgentEvent event = AgentEvent.builder()
                 .jobId(jobId)
                 .type(type)
@@ -53,10 +59,13 @@ public class AgentEventService {
                 .build();
 
         event = agentEventRepository.save(event);
-        log.debug("Created agent event: {} for job: {}", event.getId(), jobId);
+        log.info("[AGENT] Saved event: {} | Broadcasting to WebSocket", event.getId());
 
-        // Broadcast to WebSocket clients
+        // Broadcast to internal WebSocket clients (agent module)
         webSocketHandler.sendAgentEvent(jobId, event);
+
+        // Broadcast to public WebSocket clients (frontend)
+        publicWebSocketHandler.sendAgentEvent(jobId, event);
 
         return event;
     }

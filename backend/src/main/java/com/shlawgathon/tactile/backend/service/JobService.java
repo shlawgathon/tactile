@@ -47,8 +47,20 @@ public class JobService {
 
         job = jobRepository.save(job);
 
-        // Send to agent module
-        agentCommunicationService.startJob(job);
+        // Send to agent module and update status
+        try {
+            agentCommunicationService.startJob(job);
+            // Update to PARSING status to indicate job is being processed
+            job.setStatus(JobStatus.PARSING);
+            job.setCurrentStage("PARSING");
+            job.setStartedAt(Instant.now());
+            job = jobRepository.save(job);
+            webSocketHandler.sendJobUpdate(job.getId(), job);
+        } catch (Exception e) {
+            // If agent communication fails, job stays queued for retry
+            job.setErrorMessage("Failed to start agent: " + e.getMessage());
+            jobRepository.save(job);
+        }
 
         return job;
     }
