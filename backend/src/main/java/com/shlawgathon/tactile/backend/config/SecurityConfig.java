@@ -6,20 +6,28 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    private final AgentApiKeyAuthFilter agentApiKeyAuthFilter;
+
+    public SecurityConfig(AgentApiKeyAuthFilter agentApiKeyAuthFilter) {
+        this.agentApiKeyAuthFilter = agentApiKeyAuthFilter;
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .addFilterBefore(agentApiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         // Public endpoints
                         .requestMatchers("/swagger-ui/**", "/api-docs/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/internal/**").permitAll() // Agent module callbacks
+                        .requestMatchers("/internal/**").permitAll() // Agent module callbacks (auth handled by filter)
                         .requestMatchers("/api/health").permitAll()
                         // All other requests require authentication
                         .anyRequest().authenticated())

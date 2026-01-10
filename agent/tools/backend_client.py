@@ -21,15 +21,19 @@ class BackendClient:
     2. Broadcast to WebSocket clients in real-time
     """
     
-    def __init__(self, base_url: Optional[str] = None):
+    def __init__(self, base_url: Optional[str] = None, api_key: Optional[str] = None):
         self.base_url = base_url or os.getenv("BACKEND_URL", "http://localhost:8080")
+        self.api_key = api_key or os.getenv("AGENT_API_KEY", "")
         self._client: Optional[httpx.AsyncClient] = None
         self._connection_failed = False  # Track if backend is unavailable
     
     async def connect(self):
-        """Create the HTTP client."""
+        """Create the HTTP client with API key header if configured."""
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=30.0)
+            headers = {}
+            if self.api_key:
+                headers["X-Agent-Api-Key"] = self.api_key
+            self._client = httpx.AsyncClient(timeout=30.0, headers=headers)
     
     async def close(self):
         """Close the HTTP client."""

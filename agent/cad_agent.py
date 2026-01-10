@@ -11,7 +11,6 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from fireworks_client import FireworksClient
 from tools.cadquery_executor import execute_cadquery_code
-from tools.memory_client import MemoryClient, get_memory_client
 from tools.screenshot_renderer import capture_screenshot, capture_multiple_views, AVAILABLE_VIEWS
 
 # Import backend client for posting events to Java backend
@@ -207,7 +206,6 @@ class CADAgent:
         manufacturing_process: str = "FDM_3D_PRINTING",
         workplane: Optional[Any] = None,
         step_file_path: Optional[str] = None,
-        memory_client: Optional[MemoryClient] = None,
         llm_client: Optional[FireworksClient] = None,
         backend_client: Optional[Any] = None,
     ):
@@ -216,7 +214,6 @@ class CADAgent:
         self.workplane = workplane
         self.step_file_path = step_file_path  # Path to STEP file for subprocess use
         self._temp_step_file: Optional[str] = None  # Track temp file for cleanup
-        self.memory_client = memory_client
         self.llm_client = llm_client
         self.backend_client = backend_client  # For posting events to Java backend
         self.conversation: List[Message] = []
@@ -224,16 +221,13 @@ class CADAgent:
         
     async def initialize(self):
         """Initialize async resources."""
-        if self.memory_client is None:
-            self.memory_client = await get_memory_client()
         if self.llm_client is None:
             self.llm_client = FireworksClient()
-        # Initialize backend client if available and not provided
-        if self.backend_client is None and BACKEND_CLIENT_AVAILABLE:
-            try:
-                self.backend_client = await get_backend_client()
-            except Exception as e:
-                logger.warning(f"Could not initialize backend client: {e}")
+        # Initialize backend client - required for all tool operations
+        if self.backend_client is None:
+            if not BACKEND_CLIENT_AVAILABLE:
+                raise RuntimeError("Backend client is required but not available")
+            self.backend_client = await get_backend_client()
         
         # Export workplane to temp STEP file for subprocess use
         if self.workplane is not None and self.step_file_path is None:
@@ -354,57 +348,30 @@ CNC MACHINING RULES:
             return result
             
         elif tool_name == "store_memory":
-            # Use backend client if available, otherwise fall back to direct MongoDB
-            if self.backend_client:
-                result = await self.backend_client.store_memory(
-                    job_id=self.job_id,
-                    key=arguments.get("key", ""),
-                    value=arguments.get("value", ""),
-                    category=arguments.get("category", "observation")
-                )
-            else:
-                result = await self.memory_client.store_memory(
-                    job_id=self.job_id,
-                    key=arguments.get("key", ""),
-                    value=arguments.get("value", ""),
-                    category=arguments.get("category", "observation")
-                )
+            result = await self.backend_client.store_memory(
+                job_id=self.job_id,
+                key=arguments.get("key", ""),
+                value=arguments.get("value", ""),
+                category=arguments.get("category", "observation")
+            )
             return result
             
         elif tool_name == "read_memory":
-            # Use backend client if available, otherwise fall back to direct MongoDB
-            if self.backend_client:
-                result = await self.backend_client.read_memory(
-                    job_id=self.job_id,
-                    query=arguments.get("query"),
-                    category=arguments.get("category")
-                )
-            else:
-                result = await self.memory_client.read_memory(
-                    job_id=self.job_id,
-                    query=arguments.get("query"),
-                    category=arguments.get("category")
-                )
+            result = await self.backend_client.read_memory(
+                job_id=self.job_id,
+                query=arguments.get("query"),
+                category=arguments.get("category")
+            )
             return result
             
         elif tool_name == "give_suggestion":
-            # Use backend client if available, otherwise fall back to direct MongoDB
-            if self.backend_client:
-                result = await self.backend_client.give_suggestion(
-                    job_id=self.job_id,
-                    suggestion=arguments.get("suggestion", ""),
-                    issue_id=arguments.get("issue_id"),
-                    priority=arguments.get("priority", 2),
-                    auto_fix_code=arguments.get("auto_fix_code")
-                )
-            else:
-                result = await self.memory_client.give_suggestion(
-                    job_id=self.job_id,
-                    suggestion=arguments.get("suggestion", ""),
-                    issue_id=arguments.get("issue_id"),
-                    priority=arguments.get("priority", 2),
-                    auto_fix_code=arguments.get("auto_fix_code")
-                )
+            result = await self.backend_client.give_suggestion(
+                job_id=self.job_id,
+                suggestion=arguments.get("suggestion", ""),
+                issue_id=arguments.get("issue_id"),
+                priority=arguments.get("priority", 2),
+                auto_fix_code=arguments.get("auto_fix_code")
+            )
             return result
             
         elif tool_name == "capture_screenshot":
