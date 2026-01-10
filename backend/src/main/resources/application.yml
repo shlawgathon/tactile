@@ -1,6 +1,9 @@
 server:
   port: 8080
 
+springdotenv:
+  enabled: true
+
 spring:
   application:
     name: tactile-backend
