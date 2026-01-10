@@ -1,0 +1,53 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: tactile-backend
+  
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/tactile}
+      database: ${MONGODB_DATABASE:tactile}
+  
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID:your-client-id}
+            client-secret: ${GITHUB_CLIENT_SECRET:your-client-secret}
+            scope: user:email,read:user
+        provider:
+          github:
+            authorization-uri: https://github.com/login/oauth/authorize
+            token-uri: https://github.com/login/oauth/access_token
+            user-info-uri: https://api.github.com/user
+            user-name-attribute: login
+
+# Fireworks AI Configuration
+fireworks:
+  api:
+    url: ${FIREWORKS_API_URL:https://api.fireworks.ai/inference/v1/chat/completions}
+    key: ${FIREWORKS_API_KEY:your-api-key}
+    model: ${FIREWORKS_MODEL:accounts/fireworks/models/minimax-m2p1}
+
+# Agent Module Configuration
+agent:
+  module:
+    url: ${AGENT_MODULE_URL:http://localhost:8000}
+
+# OpenAPI Configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+
+# Logging
+logging:
+  level:
+    com.shlawgathon.tactile: DEBUG
+    org.springframework.security: DEBUG
