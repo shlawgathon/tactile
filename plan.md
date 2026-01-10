@@ -616,10 +616,15 @@ Tactile/
 │
 ├── agent-module/                    # Python
 │   ├── Tactile/
-│   │   ├── cad/
-│   │   │   ├── parser.py            # STEP loading, geometry extraction
-│   │   │   ├── analyzer.py          # DFM analysis functions
-│   │   │   └── codegen.py           # CadQuery code generation
+│   │   ├── cad_tool/
+│   │   │   ├── parse/               # STEP loading, geometry extraction
+│   │   │   ├── analyze/             # ✅ DFM analysis (OpenAPI compliant)
+│   │   │   │   ├── analyzer.py      # Main analysis with 20 DFM rules
+│   │   │   │   ├── geometry_analyzer.py
+│   │   │   │   ├── surface_analyzer.py
+│   │   │   │   └── assembly_analyzer.py
+│   │   │   ├── suggest/             # CadQuery code generation
+│   │   │   └── validate/            # Geometry validation
 │   │   ├── dfm/
 │   │   │   ├── rules.py             # DFM rule definitions
 │   │   │   └── checker.py           # Rule checking logic
