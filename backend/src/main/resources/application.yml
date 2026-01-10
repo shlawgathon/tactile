@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: tactile-backend
+  servlet:
+    multipart:
+      max-file-size: 512MB
+      max-request-size: 512MB
 
   data:
     mongodb:
