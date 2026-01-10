@@ -5,8 +5,10 @@ DFM Analysis endpoint with Fireworks AI LLM and CadQuery integration.
 
 import os
 import json
+import tempfile
 from typing import Optional
 from contextlib import asynccontextmanager
+from pydantic import BaseModel
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -27,6 +29,24 @@ from models import (
 from fireworks_client import FireworksClient, get_cadquery_mcp_tools
 from report_generator import generate_markdown_report
 
+
+# Request models for agent endpoints
+class StartJobRequest(BaseModel):
+    """Request to start a new analysis job."""
+    jobId: str
+    fileUrl: str
+    manufacturingProcess: str = "FDM_3D_PRINTING"
+    material: Optional[str] = None
+    callbackUrl: Optional[str] = None
+    resumeFromCheckpoint: Optional[dict] = None
+
+
+class ResumeCheckpoint(BaseModel):
+    """Checkpoint data for resuming a job."""
+    stage: str
+    state: Optional[dict] = None
+    intermediateResults: Optional[dict] = None
+
 # Import CAD Agent for streaming analysis
 try:
     from cad_agent import CADAgent, create_agent
@@ -34,6 +54,14 @@ try:
 except ImportError:
     CAD_AGENT_AVAILABLE = False
     CADAgent = None
+
+# Import backend client for posting events
+try:
+    from tools.backend_client import BackendClient, get_backend_client
+    BACKEND_CLIENT_AVAILABLE = True
+except ImportError:
+    BACKEND_CLIENT_AVAILABLE = False
+    BackendClient = None
 
 # Optional: Import teammate's analyzer if available
 try:
@@ -219,6 +247,236 @@ async def analyze_stream(job_id: str, process: str = "FDM_3D_PRINTING"):
             "X-Accel-Buffering": "no",
         }
     )
+
+
+# ==================== Backend Integration Endpoints ====================
+
+@app.post("/agent/jobs/start")
+async def start_job(request: StartJobRequest, background_tasks: BackgroundTasks):
+    """
+    Start a new analysis job. Called by the Java backend.
+    
+    This endpoint:
+    1. Downloads the STEP file from the backend
+    2. Loads it into CadQuery
+    3. Starts the analysis agent in a background task
+    4. Posts events back to the backend via HTTP (which broadcasts via WebSocket)
+    """
+    if not CAD_AGENT_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="CAD Agent not available"
+        )
+    
+    # Start the analysis as a background task
+    background_tasks.add_task(
+        run_analysis_job,
+        job_id=request.jobId,
+        file_url=request.fileUrl,
+        manufacturing_process=request.manufacturingProcess,
+        callback_url=request.callbackUrl,
+    )
+    
+    return {"status": "accepted", "jobId": request.jobId}
+
+
+@app.delete("/agent/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str):
+    """Cancel a running job."""
+    # TODO: Implement job cancellation tracking
+    return {"status": "cancelled", "jobId": job_id}
+
+
+async def run_analysis_job(
+    job_id: str,
+    file_url: str,
+    manufacturing_process: str,
+    callback_url: Optional[str] = None,
+):
+    """
+    Background task to run the full analysis pipeline.
+    Downloads STEP file, runs agent, posts events to backend.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    backend_client = None
+    agent = None
+    workplane = None
+    temp_file_path = None
+    
+    try:
+        # Initialize backend client
+        if BACKEND_CLIENT_AVAILABLE:
+            backend_client = await get_backend_client()
+        
+        # Post initial event
+        if backend_client:
+            await backend_client.post_event(
+                job_id=job_id,
+                event_type="thinking",
+                title="Starting Analysis",
+                content=f"Initializing {manufacturing_process} analysis pipeline..."
+            )
+            await backend_client.update_job_status(job_id, "PARSE", 0)
+        
+        # Download the STEP file
+        if file_url:
+            logger.info(f"Downloading STEP file from: {file_url}")
+            
+            if backend_client:
+                await backend_client.post_event(
+                    job_id=job_id,
+                    event_type="thinking",
+                    title="Downloading CAD File",
+                    content="Retrieving STEP file from storage..."
+                )
+            
+            # Create temp file
+            temp_file_path = os.path.join(tempfile.gettempdir(), f"job_{job_id}.step")
+            
+            download_result = await backend_client.download_file(file_url, temp_file_path)
+            
+            if download_result.get("success"):
+                # Load into CadQuery
+                try:
+                    import cadquery as cq
+                    workplane = cq.importers.importStep(temp_file_path)
+                    logger.info(f"Successfully loaded STEP file for job {job_id}")
+                    
+                    if backend_client:
+                        await backend_client.post_event(
+                            job_id=job_id,
+                            event_type="thinking",
+                            title="CAD File Loaded",
+                            content="STEP file successfully parsed and loaded into CadQuery."
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to parse STEP file: {e}")
+                    if backend_client:
+                        await backend_client.post_event(
+                            job_id=job_id,
+                            event_type="error",
+                            title="Parse Error",
+                            content=f"Failed to parse STEP file: {str(e)}"
+                        )
+            else:
+                logger.warning(f"Failed to download STEP file: {download_result}")
+        
+        # If no workplane loaded, try default test file
+        if workplane is None:
+            default_step = os.path.join(os.path.dirname(os.path.abspath(__file__)), "battery.step")
+            if os.path.exists(default_step):
+                try:
+                    import cadquery as cq
+                    workplane = cq.importers.importStep(default_step)
+                    logger.info("Using default battery.step for testing")
+                except Exception as e:
+                    logger.warning(f"Failed to load default STEP: {e}")
+        
+        # Update status to analyzing
+        if backend_client:
+            await backend_client.update_job_status(job_id, "ANALYZE", 1)
+        
+        # Create and run agent
+        agent = await create_agent(
+            job_id=job_id,
+            manufacturing_process=manufacturing_process,
+            workplane=workplane,
+        )
+        
+        # Replace agent's memory client with backend client
+        if backend_client:
+            agent.backend_client = backend_client
+        
+        # Collect results
+        issues = []
+        suggestions = []
+        
+        # Run analysis and stream events to backend
+        async for event in agent.analyze_stream():
+            # Post each event to backend for WebSocket broadcast
+            if backend_client:
+                await backend_client.post_event(
+                    job_id=job_id,
+                    event_type=event.type.value,
+                    title=event.type.value.replace("_", " ").title(),
+                    content=event.content,
+                    metadata=event.data
+                )
+            
+            # Collect suggestions for final result
+            if event.type.value == "suggestion" and event.data:
+                suggestions.append(event.data)
+        
+        # Update status to suggesting
+        if backend_client:
+            await backend_client.update_job_status(job_id, "SUGGEST", 2)
+        
+        # Get geometry summary if workplane available
+        geometry_summary = None
+        if workplane:
+            try:
+                solid = workplane.val()
+                bb = solid.BoundingBox()
+                geometry_summary = {
+                    "boundingBox": {
+                        "minX": bb.xmin, "maxX": bb.xmax,
+                        "minY": bb.ymin, "maxY": bb.ymax,
+                        "minZ": bb.zmin, "maxZ": bb.zmax,
+                    },
+                    "volume": solid.Volume() if hasattr(solid, "Volume") else None,
+                    "surfaceArea": solid.Area() if hasattr(solid, "Area") else None,
+                    "faceCount": len(workplane.faces().vals()),
+                    "edgeCount": len(workplane.edges().vals()),
+                }
+            except Exception as e:
+                logger.warning(f"Failed to extract geometry summary: {e}")
+        
+        # Complete the job
+        if backend_client:
+            await backend_client.update_job_status(job_id, "VALIDATE", 3)
+            await backend_client.complete_job(
+                job_id=job_id,
+                issues=issues,
+                suggestions=suggestions,
+                geometry_summary=geometry_summary
+            )
+            
+            await backend_client.post_event(
+                job_id=job_id,
+                event_type="complete",
+                title="Analysis Complete",
+                content=f"Completed analysis with {len(suggestions)} suggestions."
+            )
+        
+        logger.info(f"Job {job_id} completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Job {job_id} failed: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        if backend_client:
+            await backend_client.post_event(
+                job_id=job_id,
+                event_type="error",
+                title="Analysis Failed",
+                content=f"Error: {str(e)}"
+            )
+            await backend_client.fail_job(job_id, str(e))
+    
+    finally:
+        # Cleanup
+        if agent:
+            await agent.close()
+        
+        # Remove temp file
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+            except Exception:
+                pass
 
 
 async def run_geometry_analysis(

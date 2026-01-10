@@ -14,6 +14,14 @@ from tools.cadquery_executor import execute_cadquery_code
 from tools.memory_client import MemoryClient, get_memory_client
 from tools.screenshot_renderer import capture_screenshot, capture_multiple_views, AVAILABLE_VIEWS
 
+# Import backend client for posting events to Java backend
+try:
+    from tools.backend_client import BackendClient, get_backend_client
+    BACKEND_CLIENT_AVAILABLE = True
+except ImportError:
+    BACKEND_CLIENT_AVAILABLE = False
+    BackendClient = None
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,6 +36,7 @@ class EventType(str, Enum):
     MEMORY = "memory"
     ERROR = "error"
     COMPLETE = "complete"
+    SCREENSHOT = "screenshot"
 
 
 @dataclass
@@ -64,13 +73,13 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "execute_cadquery_code",
-            "description": "Execute CadQuery Python code to analyze or measure the CAD model geometry. Use this to examine specific features, measure dimensions, check angles, count faces, etc. The code has access to a 'workplane' variable containing the current CAD model.",
+            "description": "Execute CadQuery Python code to analyze the CAD model geometry. IMPORTANT: Only use standard CadQuery (cq) module - do NOT import cq_warehouse, cq_gears, or other external packages. The 'workplane' variable is already loaded with the model.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "code": {
                         "type": "string",
-                        "description": "Python code using CadQuery to analyze the model. Must set 'result' variable with the output. Has access to 'cq' (cadquery module) and 'workplane' (current model)."
+                        "description": "Python code using CadQuery. MUST set 'result' variable. Available: 'cq' module and 'workplane' (loaded model). Example: bb = workplane.val().BoundingBox(); result = bb.xmax - bb.xmin"
                     },
                     "description": {
                         "type": "string",
@@ -188,6 +197,8 @@ class CADAgent:
     """
     LLM-powered agent for CAD analysis with tool calling.
     Follows an agentic loop: LLM thinks → calls tools → gets results → thinks more.
+    
+    CadQuery operations run in ISOLATED subprocesses to prevent crashes.
     """
     
     def __init__(
@@ -195,16 +206,21 @@ class CADAgent:
         job_id: str,
         manufacturing_process: str = "FDM_3D_PRINTING",
         workplane: Optional[Any] = None,
+        step_file_path: Optional[str] = None,
         memory_client: Optional[MemoryClient] = None,
         llm_client: Optional[FireworksClient] = None,
+        backend_client: Optional[Any] = None,
     ):
         self.job_id = job_id
         self.manufacturing_process = manufacturing_process
         self.workplane = workplane
+        self.step_file_path = step_file_path  # Path to STEP file for subprocess use
+        self._temp_step_file: Optional[str] = None  # Track temp file for cleanup
         self.memory_client = memory_client
         self.llm_client = llm_client
+        self.backend_client = backend_client  # For posting events to Java backend
         self.conversation: List[Message] = []
-        self.max_iterations = 10
+        self.max_iterations = 5  # Reduced to avoid memory issues with complex models
         
     async def initialize(self):
         """Initialize async resources."""
@@ -212,11 +228,57 @@ class CADAgent:
             self.memory_client = await get_memory_client()
         if self.llm_client is None:
             self.llm_client = FireworksClient()
+        # Initialize backend client if available and not provided
+        if self.backend_client is None and BACKEND_CLIENT_AVAILABLE:
+            try:
+                self.backend_client = await get_backend_client()
+            except Exception as e:
+                logger.warning(f"Could not initialize backend client: {e}")
+        
+        # Export workplane to temp STEP file for subprocess use
+        if self.workplane is not None and self.step_file_path is None:
+            try:
+                import tempfile
+                from cadquery import exporters
+                temp_file = tempfile.NamedTemporaryFile(suffix=".step", delete=False)
+                temp_file.close()
+                exporters.export(self.workplane, temp_file.name)
+                self.step_file_path = temp_file.name
+                self._temp_step_file = temp_file.name
+                logger.info(f"Exported workplane to temp file: {temp_file.name}")
+            except Exception as e:
+                logger.warning(f"Could not export workplane to temp file: {e}")
     
     async def close(self):
         """Close async resources."""
         if self.llm_client:
             await self.llm_client.close()
+        
+        # Clean up temp STEP file
+        if self._temp_step_file:
+            try:
+                import os
+                if os.path.exists(self._temp_step_file):
+                    os.unlink(self._temp_step_file)
+                    logger.info(f"Cleaned up temp file: {self._temp_step_file}")
+            except Exception as e:
+                logger.warning(f"Could not clean up temp file: {e}")
+    
+    async def _post_event_to_backend(self, event: AgentEvent):
+        """Post an event to the backend for WebSocket broadcast."""
+        if self.backend_client is None:
+            return
+        
+        try:
+            await self.backend_client.post_event(
+                job_id=self.job_id,
+                event_type=event.type.value,
+                title=event.type.value.replace("_", " ").title(),
+                content=event.content,
+                metadata=event.data
+            )
+        except Exception as e:
+            logger.warning(f"Failed to post event to backend: {e}")
     
     def _build_system_prompt(self, image_description: Optional[str] = None) -> str:
         """Build the system prompt for the agent."""
@@ -241,6 +303,8 @@ When writing CadQuery code:
 - Always set the 'result' variable with your analysis output
 - Be precise with measurements (use mm)
 - Handle potential errors gracefully
+- ONLY use the 'cq' module - do NOT import cq_warehouse, cq_gears, or other packages
+- Example: faces = workplane.faces().vals(); result = len(faces)
 
 Be thorough but efficient. Focus on issues that would actually affect manufacturing.
 """
@@ -277,49 +341,79 @@ CNC MACHINING RULES:
         return base
     
     async def _execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a tool and return the result."""
-        if tool_name == "execute_cadquery_code":
+        """Execute a tool and return the result. CadQuery runs in isolated subprocess."""
+        # Handle both naming conventions (LLM sometimes uses underscores)
+        if tool_name in ("execute_cadquery_code", "execute_cad_query_code"):
             code = arguments.get("code", "")
+            # Pass step_file_path for subprocess isolation
             result = await execute_cadquery_code(
                 code, 
-                workplane=self.workplane,
+                step_file_path=self.step_file_path,
                 timeout_seconds=30.0
             )
             return result
             
         elif tool_name == "store_memory":
-            result = await self.memory_client.store_memory(
-                job_id=self.job_id,
-                key=arguments.get("key", ""),
-                value=arguments.get("value", ""),
-                category=arguments.get("category", "observation")
-            )
+            # Use backend client if available, otherwise fall back to direct MongoDB
+            if self.backend_client:
+                result = await self.backend_client.store_memory(
+                    job_id=self.job_id,
+                    key=arguments.get("key", ""),
+                    value=arguments.get("value", ""),
+                    category=arguments.get("category", "observation")
+                )
+            else:
+                result = await self.memory_client.store_memory(
+                    job_id=self.job_id,
+                    key=arguments.get("key", ""),
+                    value=arguments.get("value", ""),
+                    category=arguments.get("category", "observation")
+                )
             return result
             
         elif tool_name == "read_memory":
-            result = await self.memory_client.read_memory(
-                job_id=self.job_id,
-                query=arguments.get("query"),
-                category=arguments.get("category")
-            )
+            # Use backend client if available, otherwise fall back to direct MongoDB
+            if self.backend_client:
+                result = await self.backend_client.read_memory(
+                    job_id=self.job_id,
+                    query=arguments.get("query"),
+                    category=arguments.get("category")
+                )
+            else:
+                result = await self.memory_client.read_memory(
+                    job_id=self.job_id,
+                    query=arguments.get("query"),
+                    category=arguments.get("category")
+                )
             return result
             
         elif tool_name == "give_suggestion":
-            result = await self.memory_client.give_suggestion(
-                job_id=self.job_id,
-                suggestion=arguments.get("suggestion", ""),
-                issue_id=arguments.get("issue_id"),
-                priority=arguments.get("priority", 2),
-                auto_fix_code=arguments.get("auto_fix_code")
-            )
+            # Use backend client if available, otherwise fall back to direct MongoDB
+            if self.backend_client:
+                result = await self.backend_client.give_suggestion(
+                    job_id=self.job_id,
+                    suggestion=arguments.get("suggestion", ""),
+                    issue_id=arguments.get("issue_id"),
+                    priority=arguments.get("priority", 2),
+                    auto_fix_code=arguments.get("auto_fix_code")
+                )
+            else:
+                result = await self.memory_client.give_suggestion(
+                    job_id=self.job_id,
+                    suggestion=arguments.get("suggestion", ""),
+                    issue_id=arguments.get("issue_id"),
+                    priority=arguments.get("priority", 2),
+                    auto_fix_code=arguments.get("auto_fix_code")
+                )
             return result
             
         elif tool_name == "capture_screenshot":
             # Lazy import to avoid circular dep
             from tools.screenshot_renderer import capture_screenshot, read_svg_content
             
+            # Use step_file_path for subprocess isolation
             result = await capture_screenshot(
-                workplane=self.workplane,
+                step_file_path=self.step_file_path,
                 view=arguments.get("view", "iso"),
             )
             
@@ -327,10 +421,6 @@ CNC MACHINING RULES:
             if result.get("success") and result.get("path"):
                 try:
                     svg_content = read_svg_content(result["path"])
-                    # Truncate if excessively large (e.g. > 1MB) to avoid OOM, 
-                    # but current models can handle large context. 
-                    # Providing a reasonable limit of 200KB characters for safety if needed,
-                    # but usually we want the whole thing.
                     result["svg_content"] = svg_content
                 except Exception as e:
                     result["error_reading_content"] = str(e)
@@ -347,37 +437,42 @@ CNC MACHINING RULES:
     ) -> AsyncGenerator[AgentEvent, None]:
         """
         Run the agentic analysis loop and stream events.
+        Events are both yielded (for SSE) and posted to backend (for WebSocket).
         """
         await self.initialize()
         
+        # Helper to yield and post event
+        async def emit_event(event: AgentEvent) -> AgentEvent:
+            await self._post_event_to_backend(event)
+            return event
+        
         # 0. Initial Screenshot Step
-        yield AgentEvent(type=EventType.THINKING, content="Capturing initial view of the model...")
+        yield await emit_event(AgentEvent(type=EventType.THINKING, content="Capturing initial view of the model..."))
         
         # Lazy import to avoid circular dep
         from tools.screenshot_renderer import capture_screenshot, read_svg_content
         
-        # Capture ISO view automatically
-        init_shot = await capture_screenshot(self.workplane, view="iso")
+        # Capture ISO view automatically (using step_file_path for subprocess isolation)
+        init_shot = await capture_screenshot(step_file_path=self.step_file_path, view="iso")
         
         svg_context = ""
         if init_shot.get("success"):
             path = init_shot.get("path")
-            yield AgentEvent(
-                type=EventType.SCREENSHOT,  # New event type (need to add to Enum)
+            yield await emit_event(AgentEvent(
+                type=EventType.SCREENSHOT,
                 content="Initial ISO View",
                 data=init_shot
-            )
+            ))
             
-            # Read minimal content for LLM context
+            # Read minimal content for LLM context - truncate to avoid context overflow
             try:
                 svg_content = read_svg_content(path)
-                # We can truncate or optimize here if needed, but for now pass standard context
-                # Just indicate we have the visual
-                svg_context = f"\n\nInitial Model View (SVG):\n{svg_content[:500]}... (truncated for brevity in log, full content passed to model)"
-                
-                # Update screenshot result with content for the actual LLM call if we decide to pass full content
-                # For this implementation, we'll append standard SVG context to the user message
-                svg_context = svg_content 
+                # Truncate SVG to ~20KB to avoid context overflow (most detail in first portion)
+                max_svg_chars = 20000
+                if len(svg_content) > max_svg_chars:
+                    svg_context = svg_content[:max_svg_chars] + "\n<!-- SVG truncated -->"
+                else:
+                    svg_context = svg_content
             except Exception:
                 pass
 
@@ -392,10 +487,10 @@ CNC MACHINING RULES:
         else:
             user_message = base_msg
         
-        yield AgentEvent(
+        yield await emit_event(AgentEvent(
             type=EventType.THINKING,
             content=f"Starting {self.manufacturing_process} analysis loop..."
-        )
+        ))
         
         iteration = 0
         
@@ -425,10 +520,10 @@ CNC MACHINING RULES:
                 
                 # Stream thought content
                 if content:
-                    yield AgentEvent(
+                    yield await emit_event(AgentEvent(
                         type=EventType.THINKING,
                         content=content
-                    )
+                    ))
                 
                 # Handle tool calls
                 if tool_calls:
@@ -440,44 +535,44 @@ CNC MACHINING RULES:
                         except:
                             tool_input = {}
                             
-                        yield AgentEvent(
+                        yield await emit_event(AgentEvent(
                             type=EventType.TOOL_CALL,
                             content=f"Calling {tool_name}...",
                             data={"tool": tool_name, "input": tool_input}
-                        )
+                        ))
                         
                         # Execute tool
                         result = await self._execute_tool(tool_name, tool_input)
                         
-                        yield AgentEvent(
+                        yield await emit_event(AgentEvent(
                             type=EventType.TOOL_RESULT,
                             content=f"{tool_name} completed",
                             data={"tool": tool_name, "result": result}
-                        )
+                        ))
                         
                         # Special handling for Screenshot tool result to show it
                         if tool_name == "capture_screenshot" and result.get("success"):
-                             yield AgentEvent(
+                             yield await emit_event(AgentEvent(
                                 type=EventType.SCREENSHOT,
                                 content=f"Screenshot ({tool_input.get('view', 'view')})",
                                 data=result
-                            )
+                            ))
                         
                         # Special handling for suggestions
                         if tool_name == "give_suggestion" and result.get("success"):
-                            yield AgentEvent(
+                            yield await emit_event(AgentEvent(
                                 type=EventType.SUGGESTION,
                                 content=tool_input.get("suggestion", ""),
                                 data=result.get("suggestion")
-                            )
+                            ))
                         
                         # Special handling for memory storage
                         if tool_name == "store_memory" and result.get("success"):
-                            yield AgentEvent(
+                            yield await emit_event(AgentEvent(
                                 type=EventType.MEMORY,
                                 content=f"Stored: {tool_input.get('key')}",
                                 data={"action": "store", "key": tool_input.get("key")}
-                            )
+                            ))
                 
                 # Stop condition (if no tool calls and we have content, usually implies done or waiting for user)
                 # But in this loop, if no tools calls, we generally stop unless we want to prompt for confirmation
@@ -488,18 +583,18 @@ CNC MACHINING RULES:
                 logger.error(f"Error in agent loop: {e}")
                 import traceback
                 traceback.print_exc()
-                yield AgentEvent(
+                yield await emit_event(AgentEvent(
                     type=EventType.ERROR,
                     content=f"Error: {str(e)}"
-                )
+                ))
                 break
         
         # Completion event
-        yield AgentEvent(
+        yield await emit_event(AgentEvent(
             type=EventType.COMPLETE,
             content=f"Analysis complete after {iteration} iterations.",
             data={"iterations": iteration}
-        )
+        ))
     
     async def analyze(
         self,
@@ -520,12 +615,14 @@ async def create_agent(
     job_id: str,
     manufacturing_process: str = "FDM_3D_PRINTING",
     workplane: Optional[Any] = None,
+    step_file_path: Optional[str] = None,
 ) -> CADAgent:
     """Factory function to create and initialize an agent."""
     agent = CADAgent(
         job_id=job_id,
         manufacturing_process=manufacturing_process,
         workplane=workplane,
+        step_file_path=step_file_path,
     )
     await agent.initialize()
     return agent
