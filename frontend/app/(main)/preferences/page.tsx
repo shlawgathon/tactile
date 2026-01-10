@@ -42,8 +42,14 @@ export default function PreferencesPage() {
 
     const handleUpgrade = async (tier: 'PRO' | 'ENTERPRISE') => {
         // Require wallet connection first
-        if (!isConnected || !fetchWithPayment) {
+        if (!isConnected) {
             toast.error("Please connect your wallet first to make payment.");
+            return;
+        }
+
+        // Wait for wallet client to be ready
+        if (!fetchWithPayment) {
+            toast.error("Wallet is connected but not ready. Please wait a moment and try again.");
             return;
         }
 

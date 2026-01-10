@@ -46,12 +46,12 @@ function wagmiToClientSigner(walletClient: WalletClient): ClientEvmSigner {
  * - getPaymentResponse: Get the payment settlement response from headers
  */
 export function useX402Payment() {
-    const { data: walletClient, isLoading: isWalletLoading } = useWalletClient();
-    const { address, isConnected } = useAccount();
+    const { address, isConnected, chainId } = useAccount();
+    const { data: walletClient, isLoading: isWalletLoading } = useWalletClient({ chainId });
     const { connect, connectors, isPending: isConnecting, error: connectError } = useConnect();
 
     // Debug logging for connection state
-    console.log('Wallet state:', { isConnected, address, isConnecting, isWalletLoading, hasWalletClient: !!walletClient });
+    console.log('Wallet state:', { isConnected, address, chainId, isConnecting, isWalletLoading, hasWalletClient: !!walletClient });
 
     // Create x402 client and register EVM scheme when wallet is connected
     const { fetchWithPayment, httpClient } = useMemo(() => {
@@ -88,23 +88,23 @@ export function useX402Payment() {
     /**
      * Helper to trigger wallet connection with any available connector.
      */
-    const connectWallet = useCallback(() => {
+    const connectWallet = useCallback(async () => {
         console.log('Available connectors:', connectors.map(c => ({ id: c.id, name: c.name })));
 
-        // Try injected first (MetaMask extension) - more reliable for development
-        // SDK-based connectors (Coinbase SDK, MetaMask SDK) can have popup issues
-        const preferredOrder = ['injected', 'metaMaskSDK', 'coinbaseWalletSDK'];
+        // Check if window.ethereum exists (browser extension installed)
+        if (typeof window !== 'undefined' && 'ethereum' in window) {
+            console.log('window.ethereum detected:', {
+                isCoinbaseWallet: (window as unknown as { ethereum: { isCoinbaseWallet?: boolean } }).ethereum?.isCoinbaseWallet,
+                isMetaMask: (window as unknown as { ethereum: { isMetaMask?: boolean } }).ethereum?.isMetaMask,
+            });
+        }
 
-        for (const preferred of preferredOrder) {
-            const connector = connectors.find(c =>
-                c.id.toLowerCase().includes(preferred.toLowerCase()) ||
-                c.name.toLowerCase().includes(preferred.toLowerCase())
-            );
-            if (connector) {
-                console.log('Connecting with:', connector.id, connector.name);
-                connect({ connector });
-                return;
-            }
+        // Prefer injected connector for browser extensions
+        const injectedConnector = connectors.find(c => c.id === 'injected');
+        if (injectedConnector) {
+            console.log('Using injected connector for browser extension');
+            connect({ connector: injectedConnector });
+            return;
         }
 
         // Fallback to first available connector
@@ -112,7 +112,7 @@ export function useX402Payment() {
             console.log('Fallback connecting with:', connectors[0].id, connectors[0].name);
             connect({ connector: connectors[0] });
         } else {
-            console.error('No connectors available');
+            console.error('No connectors available - please install a wallet extension');
         }
     }, [connect, connectors]);
 
