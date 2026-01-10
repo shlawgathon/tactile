@@ -7,12 +7,13 @@ import os
 import httpx
 from typing import Dict, Any, Optional, List
 
-FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/responses"
-DEFAULT_MODEL = "accounts/fireworks/models/llama-v3p3-70b-instruct"
+# Standard Chat Completions API
+FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/chat/completions"
+DEFAULT_MODEL = "accounts/fireworks/models/minimax-m2p1"
 
 
 class FireworksClient:
-    """Client for Fireworks AI Responses API with MCP tool support."""
+    """Client for Fireworks AI Chat Completions API with MCP tool support."""
     
     def __init__(self, api_key: Optional[str] = None, model: str = DEFAULT_MODEL):
         self.api_key = api_key or os.getenv("FIREWORKS_API_KEY")
@@ -30,47 +31,53 @@ class FireworksClient:
     ) -> Dict[str, Any]:
         """
         Send CAD analysis request to Fireworks AI LLM.
-        
-        Args:
-            cad_description: Text description or parsed CAD data
-            manufacturing_process: INJECTION_MOLDING, CNC_MACHINING, or FDM_3D_PRINTING
-            geometry_data: Optional geometry analysis results from CadQuery
-            mcp_tools: Optional MCP tool definitions for CadQuery operations
-            
-        Returns:
-            LLM response with issues and suggestions
         """
         
         system_instructions = self._build_system_prompt(manufacturing_process)
+        user_content = self._build_input(cad_description, geometry_data)
         
-        # Build input with CAD context
-        input_text = self._build_input(cad_description, geometry_data)
+        # Build standard chat messages
+        messages = [
+            {"role": "system", "content": system_instructions},
+            {"role": "user", "content": user_content}
+        ]
         
+        # User requested specific payload parameters
         payload = {
             "model": self.model,
-            "input": input_text,
-            "instructions": system_instructions,
-            "max_output_tokens": 4096,
-            "temperature": 0.3,  # Lower for more deterministic DFM analysis
-            "store": False,  # Don't persist for privacy
+            "messages": messages,
+            "max_tokens": 4096,
+            "top_p": 1,
+            "top_k": 40,
+            "presence_penalty": 0,
+            "frequency_penalty": 0,
+            "temperature": 0.6,
         }
         
-        # Add MCP tools if provided (for CadQuery operations)
+        # Add tools if provided (OpenAI compatible format)
         if mcp_tools:
+            # Minimax / Chat API typically supports tools. 
+            # If the user-provided snippet didn't include tools, we should be careful.
+            # But the agent relies on tools. We'll add them if passed.
             payload["tools"] = mcp_tools
-            payload["tool_choice"] = "auto"
-            payload["max_tool_calls"] = 10
+            # payload["tool_choice"] = "auto" # Some models assume auto if tools present
         
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
         }
         
+        # Using httpx for async compatibility (replaces requests.request)
         response = await self.client.post(
             FIREWORKS_API_URL,
             json=payload,
             headers=headers
         )
+        
+        if response.status_code == 401:
+             raise Exception(f"Authentication failed (401). Please check provided API Key. Response: {response.text}")
+             
         response.raise_for_status()
         
         return response.json()
