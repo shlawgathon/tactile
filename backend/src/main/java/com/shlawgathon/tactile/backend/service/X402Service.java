@@ -228,17 +228,38 @@ public class X402Service {
         return signingInput + "." + signature;
     }
 
-    private String signEs256(String data, String privateKeyPem) throws Exception {
-        // Remove PEM headers and decode
-        String keyContent = privateKeyPem
-                .replace("-----BEGIN EC PRIVATE KEY-----", "")
-                .replace("-----END EC PRIVATE KEY-----", "")
-                .replace("-----BEGIN PRIVATE KEY-----", "")
-                .replace("-----END PRIVATE KEY-----", "")
-                .replaceAll("\\s", "");
+    private String signEs256(String data, String privateKeyBase64) throws Exception {
+        // CDP returns base64-encoded raw key (not PEM format)
+        // The key is 64 bytes: first 32 bytes are private key, next 32 bytes are public
+        // key
+        byte[] keyBytes = Base64.getDecoder().decode(privateKeyBase64);
 
-        byte[] keyBytes = Base64.getDecoder().decode(keyContent);
-        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
+        // Extract just the private key portion (first 32 bytes for Ed25519, but EC
+        // needs different handling)
+        // For ES256, we need to construct the key properly
+        byte[] privateKeyBytes;
+        if (keyBytes.length == 64) {
+            // Raw format: first 32 bytes are the private scalar
+            privateKeyBytes = new byte[32];
+            System.arraycopy(keyBytes, 0, privateKeyBytes, 0, 32);
+        } else {
+            privateKeyBytes = keyBytes;
+        }
+
+        // Build PKCS8 encoded key for EC P-256
+        // PKCS8 header for P-256 EC private key
+        byte[] pkcs8Header = new byte[] {
+                0x30, (byte) 0x41, 0x02, 0x01, 0x00, 0x30, 0x13, 0x06, 0x07,
+                0x2a, (byte) 0x86, 0x48, (byte) 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08,
+                0x2a, (byte) 0x86, 0x48, (byte) 0xce, 0x3d, 0x03, 0x01, 0x07, 0x04, 0x27,
+                0x30, 0x25, 0x02, 0x01, 0x01, 0x04, 0x20
+        };
+
+        byte[] pkcs8Key = new byte[pkcs8Header.length + privateKeyBytes.length];
+        System.arraycopy(pkcs8Header, 0, pkcs8Key, 0, pkcs8Header.length);
+        System.arraycopy(privateKeyBytes, 0, pkcs8Key, pkcs8Header.length, privateKeyBytes.length);
+
+        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(pkcs8Key);
         KeyFactory keyFactory = KeyFactory.getInstance("EC");
         java.security.PrivateKey privateKey = keyFactory.generatePrivate(keySpec);
 
