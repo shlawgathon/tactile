@@ -24,11 +24,6 @@ const SideNav = ({ user, userData, projects, title }: SideNavProps) => {
     const router = useRouter();
     const pathname = usePathname();
 
-    const handleLogout = async () => {
-        await logout();
-        router.push('/login');
-    };
-
     const linkClasses = (isActive: boolean) =>
         isActive
             ? 'text-sm font-medium text-black'
