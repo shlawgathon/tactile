@@ -3,8 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { Instrument_Sans } from "next/font/google";
 import { getCurrentUser } from "../../../services/auth";
-import { upgradeSubscription, PaymentRequiredResponse } from "../../../services/users";
 import toast from 'react-hot-toast';
+import { useX402Payment, upgradeWithX402 } from "../../../hooks/useX402Payment";
 
 const instrument_sans = Instrument_Sans({
     weight: ["400", "500", "600"],
@@ -19,95 +19,57 @@ interface User {
     subscriptionTier: 'FREE' | 'PRO' | 'ENTERPRISE';
 }
 
-interface EthereumProvider {
-    request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-}
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
 
 export default function PreferencesPage() {
     const [user, setUser] = useState<User | null>(null);
     const [upgradingTier, setUpgradingTier] = useState<string | null>(null);
+
+    // x402 payment hook
+    const {
+        isConnected,
+        isLoading: isWalletLoading,
+        address,
+        connect,
+        fetchWithPayment,
+        connectors
+    } = useX402Payment();
 
     useEffect(() => {
         getCurrentUser().then((u: User) => setUser(u));
     }, []);
 
     const handleUpgrade = async (tier: 'PRO' | 'ENTERPRISE') => {
+        // Require wallet connection first
+        if (!isConnected || !fetchWithPayment) {
+            toast.error("Please connect your wallet first to make payment.");
+            return;
+        }
+
         setUpgradingTier(tier);
         const toastId = toast.loading(`Initiating upgrade to ${tier}...`);
 
         try {
-            // 1. Initial attempt
-            let result = await upgradeSubscription(tier);
+            // The x402 SDK handles the full payment flow automatically:
+            // 1. Makes initial request
+            // 2. If 402 returned, prompts for EIP-3009 signature
+            // 3. Retries with proper PAYMENT-SIGNATURE header
+            toast.loading(`Processing payment for ${tier}...`, { id: toastId });
 
-            // 2. Handle Payment Required (402)
-            if (result.status === 402 && result.data && 'accepts' in result.data) {
-                const paymentReqResponse = result.data as PaymentRequiredResponse;
-                const requirement = paymentReqResponse.accepts[0];
+            const result = await upgradeWithX402(fetchWithPayment, tier, API_URL);
 
-                toast.loading(`Payment required: ${requirement.price}. Please sign...`, { id: toastId });
-
-                // Try to sign with browser wallet (e.g. Coinbase Wallet, MetaMask)
-                if (typeof window !== 'undefined' && 'ethereum' in window) {
-                    try {
-                        const ethereum = (window as unknown as { ethereum: EthereumProvider }).ethereum;
-                        const accounts = await ethereum.request({ method: 'eth_requestAccounts' }) as string[];
-                        const account = accounts[0];
-
-                        // Sign the message. Using personal_sign for broad compatibility.
-                        // We sign the JSON string of the requirement to prove consent.
-                        const message = JSON.stringify(requirement);
-                        // For hex encoding if needed:
-                        const msgParams = message;
-
-                        // Note: Some wallets expect hex, some string. personal_sign usually handles string or hex.
-                        // Standard pattern: params: [message, address]
-                        const signature = await ethereum.request({
-                            method: 'personal_sign',
-                            params: [msgParams, account],
-                        }) as string;
-
-                        toast.loading(`Signature obtained. Verifying...`, { id: toastId });
-
-                        // 3. Retry with signature
-                        result = await upgradeSubscription(tier, signature);
-
-                    } catch (walletError: unknown) {
-                        console.error(walletError);
-                        let errorMessage = "Unknown error";
-                        if (walletError instanceof Error) {
-                            errorMessage = walletError.message;
-                        } else if (typeof walletError === 'object' && walletError !== null && 'message' in walletError) {
-                            errorMessage = (walletError as { message: string }).message;
-                        }
-                        toast.error(`Wallet interaction failed: ${errorMessage}`, { id: toastId });
-                        setUpgradingTier(null);
-                        return;
-                    }
-                } else {
-                    toast.error("Payment requires a Web3 wallet extension (e.g. Coinbase Wallet).", { id: toastId });
-                    setUpgradingTier(null);
-                    return;
-                }
-            }
-
-            // 3. Handle Success
-            // Check if it's NOT a payment required response before casting to success check
-            if (result.status === 200 && 'success' in result.data) {
-                const successData = result.data as { success: boolean, message?: string };
-                if (successData.success) {
-                    toast.success(`Upgraded to ${tier}!`, { id: toastId });
-                    // Refresh user
-                    const updatedUser = await getCurrentUser();
-                    setUser(updatedUser);
-                } else {
-                    toast.error(`Upgrade failed: ${successData.message || 'Unknown error'}`, { id: toastId });
-                }
-            } else if (result.status !== 402) {
-                // Fallback for non-200 non-402
-                toast.error(`Upgrade failed with status ${result.status}`, { id: toastId });
+            if (result.success) {
+                toast.success(`Upgraded to ${tier}!`, { id: toastId });
+                // Refresh user
+                const updatedUser = await getCurrentUser();
+                setUser(updatedUser);
+            } else {
+                const errorData = result.data as { message?: string };
+                toast.error(`Upgrade failed: ${errorData.message || 'Unknown error'}`, { id: toastId });
             }
 
         } catch (error: unknown) {
+            console.error('Upgrade error:', error);
             let errorMessage = "Unknown error";
             if (error instanceof Error) {
                 errorMessage = error.message;
@@ -117,6 +79,10 @@ export default function PreferencesPage() {
             setUpgradingTier(null);
         }
     };
+
+    // Helper to shorten wallet address for display
+    const shortenAddress = (addr: string) =>
+        `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
     if (!user) {
         return <div className="animate-pulse flex flex-col gap-8 max-w-4xl mx-auto mt-10">
@@ -167,6 +133,25 @@ export default function PreferencesPage() {
                             <span className="bg-primary text-white text-[10px] px-2 py-0.5 font-bold uppercase tracking-wide">
                                 {user.subscriptionTier || "FREE"}
                             </span>
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Wallet</label>
+                        <div className="flex items-center gap-2 text-sm">
+                            {isWalletLoading ? (
+                                <span className="text-zinc-400">Loading...</span>
+                            ) : isConnected && address ? (
+                                <span className="text-green-600 font-mono">
+                                    {shortenAddress(address)}
+                                </span>
+                            ) : (
+                                <button
+                                    onClick={() => connect()}
+                                    className="text-blue-600 hover:text-blue-700 underline cursor-pointer"
+                                >
+                                    Connect Wallet
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
