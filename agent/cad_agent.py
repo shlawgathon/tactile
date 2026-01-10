@@ -93,22 +93,22 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "store_memory",
-            "description": "Store an important observation or finding about the CAD model that should be remembered. Use this to save key insights, measurements, or identified issues.",
+            "description": "IMPORTANT: Store observations and findings about the CAD model. Call this FREQUENTLY - after EVERY measurement, after finding ANY issue, after analyzing ANY feature. This creates a thorough audit trail of your analysis.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "key": {
                         "type": "string",
-                        "description": "Short identifier for this memory (e.g., 'overhang_issue', 'wall_thickness')"
+                        "description": "Short identifier for this memory (e.g., 'bounding_box', 'face_count', 'overhang_issue_1', 'wall_thickness_min')"
                     },
                     "value": {
                         "type": "string",
-                        "description": "The observation or finding to store"
+                        "description": "The observation, measurement, or finding to store. Be detailed and include values."
                     },
                     "category": {
                         "type": "string",
                         "enum": ["observation", "measurement", "issue", "geometry"],
-                        "description": "Category of the memory"
+                        "description": "Category: 'measurement' for dimensions/counts, 'issue' for problems found, 'observation' for general notes, 'geometry' for shape analysis"
                     }
                 },
                 "required": ["key", "value", "category"]
@@ -217,7 +217,7 @@ class CADAgent:
         self.llm_client = llm_client
         self.backend_client = backend_client  # For posting events to Java backend
         self.conversation: List[Message] = []
-        self.max_iterations = 5  # Reduced to avoid memory issues with complex models
+        self.max_iterations = 10  # Increased to allow thorough analysis with frequent memory storage
         
     async def initialize(self):
         """Initialize async resources."""
@@ -279,28 +279,44 @@ class CADAgent:
         base = f"""You are a DFM (Design for Manufacturing) analysis expert AI agent.
 Your task is to analyze a CAD model for manufacturability issues specific to {self.manufacturing_process}.
 
-You have access to tools to:
-1. execute_cadquery_code - Run Python/CadQuery code to examine the geometry
-2. store_memory - Save important findings about the model
-3. read_memory - Recall previously saved findings
-4. give_suggestion - Provide actionable recommendations to improve the design
+IMPORTANT MODEL ACCESS:
+- The CAD model is ALREADY LOADED and accessible via the execute_cadquery_code tool
+- The 'workplane' variable is pre-loaded with the complete CAD geometry
+- You DO NOT need to ask for geometry data - just USE THE TOOLS to analyze it
+- The STEP file is already loaded - execute CadQuery code to examine it
+
+YOU HAVE ACCESS TO THESE TOOLS - USE THEM:
+1. execute_cadquery_code - Run Python/CadQuery code. The 'workplane' variable has the model loaded.
+2. store_memory - IMPORTANT: Store EVERY finding, measurement, and observation as memory!
+3. read_memory - Recall your previous findings
+4. capture_screenshot - Get SVG visualization of the model from different angles
+5. give_suggestion - Provide actionable recommendations for issues found
+
+MEMORY IS CRITICAL - STORE FINDINGS FREQUENTLY:
+- After EVERY measurement, call store_memory to record it
+- After identifying ANY issue, call store_memory to document it  
+- After analyzing ANY feature, call store_memory with observations
+- Memory categories: 'measurement', 'issue', 'observation', 'geometry'
+- This creates a complete audit trail of your analysis!
 
 ANALYSIS WORKFLOW:
-1. First, examine the overall geometry (bounding box, face count, volume)
-2. Check for process-specific issues (overhangs for 3D printing, draft angles for molding, etc.)
-3. Measure critical dimensions and tolerances
-4. Store important findings as memories
-5. Provide specific, actionable suggestions for each issue found
+1. Start by examining overall geometry (bounding box, faces, edges, volume)
+2. STORE each measurement as memory immediately after getting it
+3. Check for process-specific issues (overhangs, wall thickness, draft angles)
+4. STORE each issue found as memory with category='issue'
+5. Use capture_screenshot for visual verification when needed
+6. Provide specific suggestions for each issue using give_suggestion
+7. Summarize your findings
 
 When writing CadQuery code:
-- The 'workplane' variable contains the loaded CAD model
-- Always set the 'result' variable with your analysis output
-- Be precise with measurements (use mm)
-- Handle potential errors gracefully
-- ONLY use the 'cq' module - do NOT import cq_warehouse, cq_gears, or other packages
+- The 'workplane' variable IS ALREADY LOADED with the CAD model!
+- Always set 'result' variable with your analysis output
+- ONLY use the 'cq' module - do NOT import external packages
 - Example: faces = workplane.faces().vals(); result = len(faces)
+- Example: bb = workplane.val().BoundingBox(); result = {{'xlen': bb.xmax - bb.xmin}}
 
-Be thorough but efficient. Focus on issues that would actually affect manufacturing.
+DO NOT ask for geometry data - you have the tools to get it yourself!
+Be thorough but efficient. Focus on issues that actually affect manufacturing.
 """
         
         if image_description:
@@ -466,13 +482,31 @@ CNC MACHINING RULES:
             
             try:
                 # Call LLM
-                # Note: cad_description is used as the 'user' message content in our updated client
-                prompt_content = user_message if iteration == 1 else f"Iteration {iteration}: Continue analysis. If issues found, give suggestions. If done, summarize."
+                # Build iteration-appropriate prompts that emphasize tool usage
+                if iteration == 1:
+                    prompt_content = user_message
+                else:
+                    # More detailed continuation prompt that reminds about tools
+                    prompt_content = f"""Continue your DFM analysis (iteration {iteration}/{self.max_iterations}).
+
+REMEMBER: The CAD model is loaded and accessible via your tools!
+- Use execute_cadquery_code to analyze geometry (workplane variable has the model)
+- Use store_memory to record EVERY finding and measurement
+- Use capture_screenshot if you need visual verification
+- Use give_suggestion for any issues you've identified
+- Use read_memory to recall what you've already found
+
+Based on your previous analysis, continue with:
+1. Any remaining geometry measurements (and STORE them as memories)
+2. Process-specific DFM checks for {self.manufacturing_process}
+3. Suggestions for any issues found
+
+If analysis is complete, provide a final summary. Otherwise, keep using tools to analyze."""
                 
                 response = await self.llm_client.analyze_cad(
                     cad_description=prompt_content,
                     manufacturing_process=self.manufacturing_process,
-                    geometry_data={"iteration": iteration},
+                    geometry_data={"iteration": iteration, "max_iterations": self.max_iterations},
                     mcp_tools=TOOL_DEFINITIONS
                 )
                 
