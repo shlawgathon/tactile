@@ -65,7 +65,7 @@ export default function Dashboard() {
                     type="file"
                     className="hidden"
                     ref={fileInputRef}
-                    accept=".stem"
+                    accept=".step"
                     onChange={handleFileChange}
                 />
 
@@ -73,7 +73,7 @@ export default function Dashboard() {
                     <FontAwesomeIcon icon={faUpload} className="text-xl text-zinc-400 group-hover:text-black transition-colors" />
                 </div>
 
-                <p className="text-zinc-600 font-medium text-lg">Get started by uploading a <span className="font-bold text-white bg-primary px-1 border border-primary">.STEM</span> file</p>
+                <p className="text-zinc-600 font-medium text-lg">Get started by uploading a <span className="font-bold text-white bg-primary px-1 border border-primary">.STEP</span> file</p>
                 <p className="text-zinc-400 text-sm mt-2">Drag and drop or click to browse</p>
             </div>
         </div>
