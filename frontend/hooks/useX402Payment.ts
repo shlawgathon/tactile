@@ -48,7 +48,10 @@ function wagmiToClientSigner(walletClient: WalletClient): ClientEvmSigner {
 export function useX402Payment() {
     const { data: walletClient, isLoading: isWalletLoading } = useWalletClient();
     const { address, isConnected } = useAccount();
-    const { connect, connectors, isPending: isConnecting } = useConnect();
+    const { connect, connectors, isPending: isConnecting, error: connectError } = useConnect();
+
+    // Debug logging for connection state
+    console.log('Wallet state:', { isConnected, address, isConnecting, isWalletLoading, hasWalletClient: !!walletClient });
 
     // Create x402 client and register EVM scheme when wallet is connected
     const { fetchWithPayment, httpClient } = useMemo(() => {
@@ -88,8 +91,9 @@ export function useX402Payment() {
     const connectWallet = useCallback(() => {
         console.log('Available connectors:', connectors.map(c => ({ id: c.id, name: c.name })));
 
-        // Try connectors in order of preference
-        const preferredOrder = ['coinbaseWalletSDK', 'metaMaskSDK', 'injected'];
+        // Try injected first (MetaMask extension) - more reliable for development
+        // SDK-based connectors (Coinbase SDK, MetaMask SDK) can have popup issues
+        const preferredOrder = ['injected', 'metaMaskSDK', 'coinbaseWalletSDK'];
 
         for (const preferred of preferredOrder) {
             const connector = connectors.find(c =>
@@ -115,9 +119,11 @@ export function useX402Payment() {
     return {
         // Wallet state
         isConnected,
+        isConnecting,
         isLoading: isWalletLoading || isConnecting,
         address,
         connectors,
+        connectError,
 
         // Wallet actions
         connect: connectWallet,

@@ -28,6 +28,7 @@ export default function PreferencesPage() {
     // x402 payment hook
     const {
         isConnected,
+        isConnecting,
         isLoading: isWalletLoading,
         address,
         connect,
@@ -109,7 +110,7 @@ export default function PreferencesPage() {
                     <div className="flex flex-col">
                         <h2 className={`text-xl font-medium ${instrument_sans.className}`}>{user.name || 'User'}</h2>
                         <span className="text-zinc-400 text-sm flex items-center gap-1">
-                            GitHub Connected
+                            SSO User
                         </span>
                     </div>
                 </div>
@@ -138,16 +139,20 @@ export default function PreferencesPage() {
                     <div className="flex flex-col gap-1">
                         <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Wallet</label>
                         <div className="flex items-center gap-2 text-sm">
-                            {isWalletLoading ? (
-                                <span className="text-zinc-400">Loading...</span>
+                            {isWalletLoading || isConnecting ? (
+                                <span className="text-zinc-400 flex items-center gap-2">
+                                    <span className="inline-block w-4 h-4 border-2 border-zinc-300 border-t-blue-600 rounded-full animate-spin"></span>
+                                    {isConnecting ? 'Connecting...' : 'Loading...'}
+                                </span>
                             ) : isConnected && address ? (
-                                <span className="text-green-600 font-mono">
+                                <span className="text-green-600 font-mono flex items-center gap-2">
+                                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                                     {shortenAddress(address)}
                                 </span>
                             ) : (
                                 <button
                                     onClick={() => connect()}
-                                    className="text-blue-600 hover:text-blue-700 underline cursor-pointer"
+                                    className="bg-blue-600 text-white px-3 py-1 text-xs font-medium hover:bg-blue-700 transition-colors cursor-pointer"
                                 >
                                     Connect Wallet
                                 </button>

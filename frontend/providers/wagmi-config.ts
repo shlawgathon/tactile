@@ -13,8 +13,8 @@ export const config = createConfig({
     connectors: [
         coinbaseWallet({
             appName: 'Tactile',
-            // Enable smart wallet for better UX
-            preference: 'smartWalletOnly',
+            // Accept both smart wallets and regular EOA wallets
+            preference: 'all',
         }),
         metaMask(),
         injected(),
