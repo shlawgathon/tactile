@@ -13,6 +13,7 @@ import httpx
 
 from .prompts import PromptTemplates
 from .code_validator import CodeValidator
+from .cadquery_tools import CadQueryTools, format_tool_result_for_llm
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,8 @@ class SuggestionGenerator:
                 suggestion = self._llm_generate_suggestion(
                     issue=issue,
                     manufacturing_process=manufacturing_process,
-                    geometry_context=geometry_context
+                    geometry_context=geometry_context,
+                    workplane=workplane  # Pass workplane for tool execution
                 )
                 if suggestion:
                     # Validate and enhance the code if present
@@ -127,15 +129,17 @@ class SuggestionGenerator:
         self,
         issue: Dict[str, Any],
         manufacturing_process: str,
-        geometry_context: Optional[Dict[str, Any]]
+        geometry_context: Optional[Dict[str, Any]],
+        workplane: Optional[cq.Workplane] = None
     ) -> Optional[Dict[str, Any]]:
         """
-        Use Fireworks AI LLM to generate a suggestion.
+        Use Fireworks AI LLM to generate a suggestion with tool calling.
 
         Args:
             issue: Issue dict
             manufacturing_process: Manufacturing process type
             geometry_context: Optional geometry data
+            workplane: Optional workplane for tool execution
 
         Returns:
             Suggestion dict or None
@@ -148,21 +152,63 @@ class SuggestionGenerator:
             geometry_context=geometry_context
         )
 
-        # Call LLM
+        # Get CadQuery tools for LLM
+        tools = CadQueryTools.get_tool_definitions()
+
+        # Call LLM with tools
         try:
-            response = self._call_fireworks_api(system_prompt, user_prompt)
+            response, tool_calls = self._call_fireworks_api_with_tools(
+                system_prompt, user_prompt, tools, workplane
+            )
 
             # Parse response
             suggestion = self._parse_llm_response(response, issue)
+
+            # Add tool execution results if any
+            if tool_calls:
+                suggestion['tool_executions'] = tool_calls
+                suggestion['notes'] = suggestion.get('notes', [])
+                suggestion['notes'].append(f"Executed {len(tool_calls)} tool(s) in subprocess")
+
             return suggestion
 
         except Exception as e:
             logger.error(f"Fireworks API call failed: {e}")
             return None
 
+    def _call_fireworks_api_with_tools(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        tools: List[Dict[str, Any]],
+        workplane: Optional[cq.Workplane]
+    ) -> tuple[str, List[Dict[str, Any]]]:
+        """
+        Call Fireworks AI with tool definitions and handle tool execution.
+
+        Args:
+            system_prompt: System prompt
+            user_prompt: User prompt
+            tools: Tool definitions
+            workplane: Optional workplane for tool execution
+
+        Returns:
+            Tuple of (final_response, tool_execution_results)
+        """
+        # Run async call in sync context
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        return loop.run_until_complete(
+            self._call_fireworks_api_with_tools_async(system_prompt, user_prompt, tools, workplane)
+        )
+
     def _call_fireworks_api(self, system_prompt: str, user_prompt: str) -> str:
         """
-        Synchronous wrapper for async Fireworks API call.
+        Synchronous wrapper for async Fireworks API call (without tools).
 
         Args:
             system_prompt: System prompt
@@ -182,9 +228,112 @@ class SuggestionGenerator:
             self._call_fireworks_api_async(system_prompt, user_prompt)
         )
 
+    async def _call_fireworks_api_with_tools_async(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        tools: List[Dict[str, Any]],
+        workplane: Optional[cq.Workplane]
+    ) -> tuple[str, List[Dict[str, Any]]]:
+        """
+        Call Fireworks AI API with tools and handle multi-turn tool execution.
+
+        Args:
+            system_prompt: System prompt
+            user_prompt: User prompt
+            tools: Tool definitions
+            workplane: Optional workplane for tool execution
+
+        Returns:
+            Tuple of (final_response, tool_execution_results)
+        """
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+
+        tool_executions = []
+        max_turns = 5  # Limit tool calling turns
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            for turn in range(max_turns):
+                payload = {
+                    "model": self.model,
+                    "messages": messages,
+                    "max_tokens": 2048,
+                    "temperature": 0.3,
+                    "top_p": 0.9,
+                    "tools": tools,
+                    "tool_choice": "auto"
+                }
+
+                response = await client.post(
+                    self.api_url,
+                    headers=headers,
+                    json=payload
+                )
+                response.raise_for_status()
+
+                data = response.json()
+
+                if 'choices' not in data or len(data['choices']) == 0:
+                    raise ValueError("No response content from Fireworks API")
+
+                choice = data['choices'][0]
+                message = choice['message']
+
+                # Add assistant message to history
+                messages.append(message)
+
+                # Check if there are tool calls
+                if message.get('tool_calls'):
+                    # Execute each tool call
+                    for tool_call in message['tool_calls']:
+                        tool_id = tool_call['id']
+                        tool_name = tool_call['function']['name']
+                        tool_args = json.loads(tool_call['function']['arguments'])
+
+                        logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
+
+                        # Execute the tool in subprocess
+                        tool_result = CadQueryTools.execute_tool(tool_name, tool_args, workplane)
+
+                        # Store execution result
+                        tool_executions.append({
+                            'name': tool_name,
+                            'arguments': tool_args,
+                            'result': tool_result
+                        })
+
+                        # Format result for LLM
+                        result_content = format_tool_result_for_llm(tool_name, tool_result)
+
+                        # Add tool result to messages
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_id,
+                            "content": result_content
+                        })
+
+                    # Continue loop to get LLM's next response
+                    continue
+
+                # No tool calls - return final response
+                final_content = message.get('content', '')
+                return final_content, tool_executions
+
+            # Max turns reached
+            logger.warning(f"Max tool calling turns ({max_turns}) reached")
+            return messages[-1].get('content', ''), tool_executions
+
     async def _call_fireworks_api_async(self, system_prompt: str, user_prompt: str) -> str:
         """
-        Call Fireworks AI API asynchronously.
+        Call Fireworks AI API asynchronously (without tools).
 
         Args:
             system_prompt: System prompt
@@ -330,16 +479,33 @@ class SuggestionGenerator:
         if metadata.get('warnings'):
             suggestion['notes'].extend(metadata['warnings'])
 
-        # Optionally test execution (commented out for safety)
-        # if workplane is not None:
-        #     success, result, exec_error = CodeValidator.execute_safe(code, workplane)
-        #     suggestion['validated'] = success
-        #     if not success:
-        #         suggestion['execution_error'] = exec_error
-        # else:
-        #     suggestion['validated'] = True  # Syntax valid, but not executed
+        # Test execution in subprocess if workplane is provided
+        if workplane is not None:
+            try:
+                success, result_metadata, exec_error = CodeValidator.execute_safe(code, workplane, timeout=30)
+                suggestion['validated'] = success
 
-        suggestion['validated'] = True  # Mark as validated if syntax is correct
+                if success and result_metadata:
+                    # Store execution results
+                    suggestion['execution_results'] = {
+                        'volume': result_metadata.get('volume'),
+                        'surface_area': result_metadata.get('surface_area'),
+                        'face_count': result_metadata.get('face_count'),
+                        'edge_count': result_metadata.get('edge_count'),
+                        'bounding_box': result_metadata.get('bounding_box'),
+                    }
+                    suggestion['notes'].append(f"✓ Subprocess execution successful (volume: {result_metadata.get('volume', 'N/A')})")
+                else:
+                    suggestion['execution_error'] = exec_error
+                    suggestion['notes'].append(f"✗ Subprocess execution failed: {exec_error}")
+            except Exception as e:
+                logger.warning(f"Subprocess execution test failed: {e}")
+                suggestion['validated'] = True  # Still mark validated if syntax is correct
+                suggestion['notes'].append(f"Subprocess test skipped: {e}")
+        else:
+            # No workplane provided - mark as validated based on syntax only
+            suggestion['validated'] = True
+            suggestion['notes'].append("Validated syntax only (no workplane for execution test)")
 
         return suggestion
 

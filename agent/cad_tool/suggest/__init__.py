@@ -13,6 +13,7 @@ from .suggester import (
 
 from .code_validator import CodeValidator
 from .prompts import PromptTemplates
+from .cadquery_tools import CadQueryTools, format_tool_result_for_llm
 
 __all__ = [
     # Main functions
@@ -28,4 +29,6 @@ __all__ = [
     # Utilities
     'CodeValidator',
     'PromptTemplates',
+    'CadQueryTools',
+    'format_tool_result_for_llm',
 ]

@@ -2,7 +2,7 @@ import cadquery as cq
 import logging
 from typing import Any, Dict, List, Optional
 
-from .parse.parser import parse_step
+from .parse.parse import StepFileParser
 from .analyze.analyzer import analyze_dfm
 from .suggest.suggester import suggest_fixes
 from .validate.validator import validate_geometry
@@ -42,7 +42,8 @@ class CADTool:
         Loads a STEP file and extracts initial geometry metadata.
         """
         logger.info(f"[{self.job_id}] Parsing STEP file: {step_path}")
-        return parse_step(step_path)
+        parser = StepFileParser.__init__(step_path)
+        return parser.extract_geometry_info()
 
     def analyze(self, workplane: cq.Workplane, process: str) -> List[Dict[str, Any]]:
         """
