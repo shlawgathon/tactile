@@ -105,7 +105,7 @@ public class X402Service {
     public PaymentRequirement.PaymentRequiredResponse buildPaymentRequiredResponse(SubscriptionTier targetTier) {
         return PaymentRequirement.PaymentRequiredResponse.builder()
                 .x402Version(1)
-                .accepts(List.of(buildPaymentRequirement(targetTier)))
+                .paymentRequirements(List.of(buildPaymentRequirement(targetTier)))
                 .build();
     }
 

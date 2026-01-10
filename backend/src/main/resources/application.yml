@@ -66,7 +66,7 @@ cdp:
     key-secret: ${CDP_API_KEY_SECRET:your-key-secret}
   x402:
     pay-to-address: ${X402_PAY_TO_ADDRESS:0xYourAddress}
-    network: ${X402_NETWORK:base-sepolia}
+    network: ${X402_NETWORK:eip155:84532}
     asset: ${X402_ASSET:0x036CbD53842c5426634e7929541eC2318f3dCF7e}
     prices:
       pro: ${X402_PRICE_PRO:10.00}
