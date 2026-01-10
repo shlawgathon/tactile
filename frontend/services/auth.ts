@@ -1,19 +1,35 @@
-export const login = async (email: string, password: string) => {
-    return new Promise((resolve, reject) => {
-        setTimeout(() => {
-            if (email && password) {
-                resolve({ email });
-            } else {
-                reject(new Error("Invalid credentials"));
-            }
-        }, 1000);
-    });
+const API_URL = 'http://localhost:8080/api';
+
+export const getCurrentUser = async () => {
+    try {
+        const response = await fetch(`${API_URL}/users/me`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+        });
+
+        if (!response.ok) {
+            return null;
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching user:", error);
+        return null;
+    }
 };
 
 export const logout = async () => {
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            resolve(true);
-        }, 500);
-    });
+    try {
+        await fetch('http://localhost:8080/logout', {
+            method: 'POST',
+            credentials: 'include',
+        });
+        return true;
+    } catch (error) {
+        console.error("Logout error:", error);
+        return false;
+    }
 };
