@@ -249,21 +249,23 @@ export default function JobPage() {
                             )}
 
                             <div className={`p-4 bg-white ${messages.length === 0 ? 'absolute top-1/2 left-0 right-0 -translate-y-1/2 px-8' : 'border-t border-gray-100'}`}>
-                                <div className="relative flex flex-col border border-gray-200 shadow-sm bg-white focus-within:border-zinc-300 focus-within:shadow-md transition-all duration-200">
+                                <div className={`relative flex flex-col border border-gray-200 shadow-sm bg-white focus-within:border-zinc-300 focus-within:shadow-md transition-all duration-200 ${isLoading ? 'opacity-60' : ''}`}>
                                     <input
                                         type="text"
-                                        className="w-full bg-transparent text-sm p-3 focus:outline-none placeholder:text-zinc-400"
-                                        placeholder={messages.length === 0 ? "Ask a question..." : "Reply..."}
+                                        className="w-full bg-transparent text-sm p-3 focus:outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed"
+                                        placeholder={isLoading ? "Waiting for response..." : messages.length === 0 ? "Ask a question..." : "Reply..."}
                                         value={inputValue}
                                         onChange={(e) => setInputValue(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                                        disabled={isLoading}
                                         autoFocus
                                     />
                                     <div className="flex justify-between items-center px-2 pb-2">
                                         <span className="text-[10px] text-zinc-300 font-medium px-2">CMD + K</span>
                                         <button
                                             onClick={handleSendMessage}
-                                            className="text-zinc-400 hover:text-zinc-800 transition-colors p-1"
+                                            disabled={isLoading}
+                                            className={`transition-colors p-1 ${isLoading ? 'text-zinc-300 cursor-not-allowed' : 'text-zinc-400 hover:text-zinc-800'}`}
                                         >
                                             <FontAwesomeIcon icon={faPaperPlane} className="text-xs" />
                                         </button>
