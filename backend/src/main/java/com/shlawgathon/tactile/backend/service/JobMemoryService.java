@@ -100,8 +100,8 @@ public class JobMemoryService {
     }
 
     /**
-     * Search for similar memories using vector similarity.
-     * Note: Requires MongoDB Atlas vector search index to be configured.
+     * Search for similar memories using cosine similarity.
+     * Computes similarity in-memory without requiring a vector index.
      */
     public List<JobMemory> searchSimilar(String jobId, String query, int limit) {
         try {
@@ -111,49 +111,63 @@ public class JobMemoryService {
                 return getMemories(jobId).stream().limit(limit).collect(Collectors.toList());
             }
 
-            // Use MongoDB Atlas Vector Search aggregation pipeline
-            // Requires a vector search index named "memory_vector_index" on job_memories
-            // collection
-            org.bson.Document vectorSearchStage = new org.bson.Document("$vectorSearch",
-                    new org.bson.Document()
-                            .append("index", "memory_vector_index")
-                            .append("path", "embedding")
-                            .append("queryVector", queryEmbedding)
-                            .append("numCandidates", limit * 10)
-                            .append("limit", limit)
-                            .append("filter", new org.bson.Document("jobId", jobId)));
+            // Get all memories for this job
+            List<JobMemory> allMemories = getMemories(jobId);
 
-            List<org.bson.Document> pipeline = List.of(vectorSearchStage);
+            if (allMemories.isEmpty()) {
+                return allMemories;
+            }
 
-            List<JobMemory> results = mongoTemplate.getCollection("job_memories")
-                    .aggregate(pipeline, org.bson.Document.class)
-                    .map(doc -> {
-                        JobMemory memory = new JobMemory();
-                        memory.setId(doc.getString("_id"));
-                        memory.setJobId(doc.getString("jobId"));
-                        memory.setContent(doc.getString("content"));
-                        memory.setCategory(doc.getString("category"));
-                        memory.setMetadata(doc.get("metadata", Map.class));
-                        memory.setCreatedAt(doc.getDate("createdAt") != null
-                                ? doc.getDate("createdAt").toInstant()
-                                : null);
-                        return memory;
+            // Calculate cosine similarity for each memory and sort
+            List<JobMemory> results = allMemories.stream()
+                    .filter(m -> m.getEmbedding() != null && !m.getEmbedding().isEmpty())
+                    .sorted((a, b) -> {
+                        double simA = cosineSimilarity(queryEmbedding, a.getEmbedding());
+                        double simB = cosineSimilarity(queryEmbedding, b.getEmbedding());
+                        return Double.compare(simB, simA); // Descending order
                     })
-                    .into(new java.util.ArrayList<>());
+                    .limit(limit)
+                    .collect(Collectors.toList());
 
-            log.info("Vector search found {} memories for job: {}", results.size(), jobId);
+            log.info("Similarity search found {} memories for job: {}", results.size(), jobId);
 
+            // If no memories have embeddings, fall back to returning all
             if (results.isEmpty()) {
-                log.warn("Vector search returned no results, falling back to all memories");
-                return getMemories(jobId).stream().limit(limit).collect(Collectors.toList());
+                log.warn("No memories with embeddings found, returning all memories");
+                return allMemories.stream().limit(limit).collect(Collectors.toList());
             }
 
             return results;
 
         } catch (Exception e) {
-            log.error("Error performing vector search, falling back to all memories: {}", e.getMessage());
+            log.error("Error performing similarity search: {}", e.getMessage());
             return getMemories(jobId).stream().limit(limit).collect(Collectors.toList());
         }
+    }
+
+    /**
+     * Calculate cosine similarity between two vectors.
+     */
+    private double cosineSimilarity(List<Double> a, List<Double> b) {
+        if (a.size() != b.size()) {
+            return 0.0;
+        }
+
+        double dotProduct = 0.0;
+        double normA = 0.0;
+        double normB = 0.0;
+
+        for (int i = 0; i < a.size(); i++) {
+            dotProduct += a.get(i) * b.get(i);
+            normA += a.get(i) * a.get(i);
+            normB += b.get(i) * b.get(i);
+        }
+
+        if (normA == 0.0 || normB == 0.0) {
+            return 0.0;
+        }
+
+        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 
     /**
