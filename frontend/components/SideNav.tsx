@@ -37,7 +37,8 @@ const SideNav = ({ user, userData, projects, title }: SideNavProps) => {
     return (
         <div className="w-[260px] min-w-[260px] h-screen flex flex-col bg-white border-r border-gray-200">
             <div className="flex w-full items-center px-6 h-14 border-b border-gray-200">
-                <h1 className={`${instrument_sans.className} font-semibold text-md tracking-tight`}>{title}</h1>
+                {/* <h1 className={`${instrument_sans.className} font-semibold text-md tracking-tight`}>{title}</h1> */}
+                <h1 className={`bg-primary text-white py-1 px-4 text-md font-semibold ${instrument_sans.className}`}>tacticle3d</h1>
             </div>
 
             <div className="flex flex-col w-full justify-center px-6 py-5 border-b border-gray-200 gap-2">
@@ -100,12 +101,12 @@ const SideNav = ({ user, userData, projects, title }: SideNavProps) => {
                 </Link>
             </div>
 
-            <div className="flex flex-col w-full justify-center px-6 py-5 border-b border-gray-200 gap-2 mt-auto">
+            {/* <div className="flex flex-col w-full justify-center px-6 py-5 border-b border-gray-200 gap-2 mt-auto">
                 <button onClick={handleLogout} className="flex flex-row text-sm items-center text-zinc-500 hover:text-black hover:cursor-pointer transition-colors">
                     <FontAwesomeIcon icon={faSignOut} className="mr-3" />
                     <p>Log out</p>
                 </button>
-            </div>
+            </div> */}
         </div>
     );
 };
