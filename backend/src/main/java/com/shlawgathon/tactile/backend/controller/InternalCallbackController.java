@@ -3,11 +3,13 @@ package com.shlawgathon.tactile.backend.controller;
 import com.shlawgathon.tactile.backend.dto.CheckpointRequest;
 import com.shlawgathon.tactile.backend.dto.CompletionCallback;
 import com.shlawgathon.tactile.backend.dto.FailureCallback;
+import com.shlawgathon.tactile.backend.dto.SubmitSuggestionRequest;
 import com.shlawgathon.tactile.backend.model.*;
 import com.shlawgathon.tactile.backend.service.AnalysisResultService;
 import com.shlawgathon.tactile.backend.service.CheckpointService;
 import com.shlawgathon.tactile.backend.service.FileStorageService;
 import com.shlawgathon.tactile.backend.service.JobService;
+import com.shlawgathon.tactile.backend.websocket.JobWebSocketHandler;
 import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,15 +30,18 @@ public class InternalCallbackController {
     private final CheckpointService checkpointService;
     private final AnalysisResultService analysisResultService;
     private final FileStorageService fileStorageService;
+    private final JobWebSocketHandler webSocketHandler;
 
     public InternalCallbackController(JobService jobService,
             CheckpointService checkpointService,
             AnalysisResultService analysisResultService,
-            FileStorageService fileStorageService) {
+            FileStorageService fileStorageService,
+            JobWebSocketHandler webSocketHandler) {
         this.jobService = jobService;
         this.checkpointService = checkpointService;
         this.analysisResultService = analysisResultService;
         this.fileStorageService = fileStorageService;
+        this.webSocketHandler = webSocketHandler;
     }
 
     @PostMapping("/checkpoint")
@@ -132,6 +137,31 @@ public class InternalCallbackController {
             @RequestBody FailureCallback callback) {
 
         jobService.failJob(jobId, callback.getErrorMessage());
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/suggestions")
+    @Operation(summary = "Submit suggestion", description = "Submit a DFM suggestion incrementally")
+    public ResponseEntity<Void> submitSuggestion(
+            @PathVariable String jobId,
+            @RequestBody SubmitSuggestionRequest request) {
+
+        // Build suggestion
+        Suggestion suggestion = Suggestion.builder()
+                .issueId(request.getIssueId())
+                .description(request.getDescription())
+                .expectedImprovement(request.getExpectedImprovement())
+                .priority(request.getPriority())
+                .codeSnippet(request.getCodeSnippet())
+                .validated(false)
+                .build();
+
+        // Add to analysis result (creates if not exists)
+        analysisResultService.addSuggestion(jobId, suggestion);
+
+        // Broadcast to WebSocket clients
+        webSocketHandler.sendSuggestionAdded(jobId, suggestion);
+
         return ResponseEntity.ok().build();
     }
 

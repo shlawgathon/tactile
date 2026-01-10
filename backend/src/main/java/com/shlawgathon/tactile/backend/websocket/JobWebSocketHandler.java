@@ -1,7 +1,10 @@
 package com.shlawgathon.tactile.backend.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.shlawgathon.tactile.backend.model.AgentEvent;
 import com.shlawgathon.tactile.backend.model.Job;
+import com.shlawgathon.tactile.backend.model.JobMemory;
+import com.shlawgathon.tactile.backend.model.Suggestion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -79,18 +82,7 @@ public class JobWebSocketHandler extends TextWebSocketHandler {
                             "errorMessage", job.getErrorMessage() != null ? job.getErrorMessage() : ""))
                     .build();
 
-            String jsonMessage = objectMapper.writeValueAsString(message);
-            TextMessage textMessage = new TextMessage(jsonMessage);
-
-            sessions.values().forEach(session -> {
-                try {
-                    if (session.isOpen()) {
-                        session.sendMessage(textMessage);
-                    }
-                } catch (IOException e) {
-                    log.error("Failed to send WebSocket message to session: {}", session.getId(), e);
-                }
-            });
+            broadcastMessage(jobId, message);
         } catch (Exception e) {
             log.error("Failed to serialize job update for job: {}", jobId, e);
         }
@@ -115,6 +107,103 @@ public class JobWebSocketHandler extends TextWebSocketHandler {
                             "warnings", job.getWarnings() != null ? job.getWarnings() : 0))
                     .build();
 
+            broadcastMessage(jobId, message);
+        } catch (Exception e) {
+            log.error("Failed to serialize completion message for job: {}", jobId, e);
+        }
+    }
+
+    /**
+     * Send agent event to all connected clients.
+     */
+    public void sendAgentEvent(String jobId, AgentEvent event) {
+        var sessions = jobSessions.get(jobId);
+        if (sessions == null || sessions.isEmpty()) {
+            return;
+        }
+
+        try {
+            WebSocketMessage message = WebSocketMessage.builder()
+                    .type("AGENT_EVENT")
+                    .jobId(jobId)
+                    .data(Map.of(
+                            "eventId", event.getId(),
+                            "eventType", event.getType().name(),
+                            "title", event.getTitle() != null ? event.getTitle() : "",
+                            "content", event.getContent() != null ? event.getContent() : "",
+                            "metadata", event.getMetadata() != null ? event.getMetadata() : Map.of(),
+                            "createdAt", event.getCreatedAt() != null ? event.getCreatedAt().toString() : ""))
+                    .build();
+
+            broadcastMessage(jobId, message);
+        } catch (Exception e) {
+            log.error("Failed to serialize agent event for job: {}", jobId, e);
+        }
+    }
+
+    /**
+     * Send suggestion added notification.
+     */
+    public void sendSuggestionAdded(String jobId, Suggestion suggestion) {
+        var sessions = jobSessions.get(jobId);
+        if (sessions == null || sessions.isEmpty()) {
+            return;
+        }
+
+        try {
+            WebSocketMessage message = WebSocketMessage.builder()
+                    .type("SUGGESTION_ADDED")
+                    .jobId(jobId)
+                    .data(Map.of(
+                            "issueId", suggestion.getIssueId() != null ? suggestion.getIssueId() : "",
+                            "description", suggestion.getDescription() != null ? suggestion.getDescription() : "",
+                            "priority", suggestion.getPriority(),
+                            "validated", suggestion.isValidated()))
+                    .build();
+
+            broadcastMessage(jobId, message);
+        } catch (Exception e) {
+            log.error("Failed to serialize suggestion for job: {}", jobId, e);
+        }
+    }
+
+    /**
+     * Send memory stored notification.
+     */
+    public void sendMemoryStored(String jobId, JobMemory memory) {
+        var sessions = jobSessions.get(jobId);
+        if (sessions == null || sessions.isEmpty()) {
+            return;
+        }
+
+        try {
+            WebSocketMessage message = WebSocketMessage.builder()
+                    .type("MEMORY_STORED")
+                    .jobId(jobId)
+                    .data(Map.of(
+                            "memoryId", memory.getId(),
+                            "category", memory.getCategory() != null ? memory.getCategory() : "",
+                            "contentPreview", memory.getContent() != null
+                                    ? memory.getContent().substring(0, Math.min(100, memory.getContent().length()))
+                                    : ""))
+                    .build();
+
+            broadcastMessage(jobId, message);
+        } catch (Exception e) {
+            log.error("Failed to serialize memory stored for job: {}", jobId, e);
+        }
+    }
+
+    /**
+     * Broadcast a message to all sessions for a job.
+     */
+    private void broadcastMessage(String jobId, WebSocketMessage message) {
+        var sessions = jobSessions.get(jobId);
+        if (sessions == null || sessions.isEmpty()) {
+            return;
+        }
+
+        try {
             String jsonMessage = objectMapper.writeValueAsString(message);
             TextMessage textMessage = new TextMessage(jsonMessage);
 
@@ -124,11 +213,11 @@ public class JobWebSocketHandler extends TextWebSocketHandler {
                         session.sendMessage(textMessage);
                     }
                 } catch (IOException e) {
-                    log.error("Failed to send completion message to session: {}", session.getId(), e);
+                    log.error("Failed to send WebSocket message to session: {}", session.getId(), e);
                 }
             });
         } catch (Exception e) {
-            log.error("Failed to serialize completion message for job: {}", jobId, e);
+            log.error("Failed to broadcast message for job: {}", jobId, e);
         }
     }
 

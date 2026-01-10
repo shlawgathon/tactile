@@ -44,6 +44,13 @@ thesys:
     key: ${THESYS_API_KEY:your-thesys-api-key}
     model: ${THESYS_MODEL:c1/anthropic/claude-sonnet-4/v-20250617}
 
+# Voyage AI Configuration (for embeddings)
+voyage:
+  api:
+    url: ${VOYAGE_API_URL:https://api.voyageai.com/v1/embeddings}
+    key: ${VOYAGE_API_KEY:your-voyage-api-key}
+    model: ${VOYAGE_MODEL:voyage-3}
+
 # OpenAPI Configuration
 springdoc:
   api-docs:
