@@ -13,6 +13,7 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from models import (
     AnalyzeRequest,
@@ -25,6 +26,14 @@ from models import (
 )
 from fireworks_client import FireworksClient, get_cadquery_mcp_tools
 from report_generator import generate_markdown_report
+
+# Import CAD Agent for streaming analysis
+try:
+    from cad_agent import CADAgent, create_agent
+    CAD_AGENT_AVAILABLE = True
+except ImportError:
+    CAD_AGENT_AVAILABLE = False
+    CADAgent = None
 
 # Optional: Import teammate's analyzer if available
 try:
@@ -154,6 +163,62 @@ async def analyze_cad(request: AnalyzeRequest):
             markdown_report=f"# Analysis Failed\n\nError: {str(e)}",
             error=str(e),
         )
+
+
+@app.get("/analyze-stream/{job_id}")
+async def analyze_stream(job_id: str, process: str = "FDM_3D_PRINTING"):
+    """
+    Stream CAD analysis via Server-Sent Events.
+    
+    The agent will:
+    1. Examine the CAD model screenshot/geometry
+    2. Execute CadQuery code to analyze features
+    3. Store findings to memory
+    4. Provide suggestions
+    
+    Events are streamed in real-time as the agent thinks.
+    """
+    if not CAD_AGENT_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="CAD Agent not available. Check cad_agent.py imports."
+        )
+    
+    async def event_generator():
+        # Load battery.step by default for testing
+        workplane = None
+        try:
+            import cadquery as cq
+            import os
+            
+            # Check for battery.step in agent dir
+            default_step = os.path.join(os.path.dirname(os.path.abspath(__file__)), "battery.step")
+            if os.path.exists(default_step):
+                workplane = cq.importers.importStep(default_step)
+        except Exception:
+            pass  # Fallback to None (or handle error)
+
+        agent = await create_agent(
+            job_id=job_id,
+            manufacturing_process=process,
+            workplane=workplane,
+        )
+        
+        try:
+            async for event in agent.analyze_stream():
+                yield event.to_sse()
+        finally:
+            await agent.close()
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 async def run_geometry_analysis(
