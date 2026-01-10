@@ -51,6 +51,20 @@ voyage:
     key: ${VOYAGE_API_KEY:your-voyage-api-key}
     model: ${VOYAGE_MODEL:voyage-3}
 
+# Coinbase Developer Platform (x402 Payments)
+cdp:
+  api:
+    url: ${CDP_API_URL:https://api.cdp.coinbase.com/platform}
+    key-name: ${CDP_API_KEY_NAME:your-key-name}
+    key-secret: ${CDP_API_KEY_SECRET:your-key-secret}
+  x402:
+    pay-to-address: ${X402_PAY_TO_ADDRESS:0xYourAddress}
+    network: ${X402_NETWORK:eip155:84532}
+    asset: ${X402_ASSET:USDC}
+    prices:
+      pro: ${X402_PRICE_PRO:10.00}
+      enterprise: ${X402_PRICE_ENTERPRISE:99.00}
+
 # OpenAPI Configuration
 springdoc:
   api-docs:
