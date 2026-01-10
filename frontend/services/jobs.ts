@@ -103,3 +103,33 @@ export const getJobs = async (): Promise<Job[]> => {
         return [];
     }
 };
+
+export interface AgentEvent {
+    id: string;
+    jobId: string;
+    type: string;
+    title: string;
+    content: string;
+    metadata: Record<string, any>;
+    createdAt: string;
+}
+
+export const getJobEvents = async (jobId: string): Promise<AgentEvent[]> => {
+    try {
+        // Construct internal URL by removing '/api' suffix if present
+        const baseUrl = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
+        const response = await fetch(`${baseUrl}/internal/jobs/${jobId}/events`, {
+            method: 'GET',
+            credentials: 'include',
+        });
+
+        if (!response.ok) {
+            return [];
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching job events:", error);
+        return [];
+    }
+};

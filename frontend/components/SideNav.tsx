@@ -7,6 +7,7 @@ import { logout } from "../services/auth";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Instrument_Sans } from "next/font/google";
+import { getJobs, Job } from "../services/jobs";
 
 const instrument_sans = Instrument_Sans({
     weight: ["400", "500", "600"],
@@ -23,6 +24,13 @@ const SideNav = ({ user, userData, title }: SideNavProps) => {
     const router = useRouter();
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
+    const [recentJobs, setRecentJobs] = useState<Job[]>([]);
+
+    useEffect(() => {
+        getJobs().then(jobs => {
+            setRecentJobs(jobs);
+        });
+    }, []);
 
     const linkClasses = (isActive: boolean) =>
         `text-sm font-medium transition-colors ${isActive
@@ -38,7 +46,7 @@ const SideNav = ({ user, userData, title }: SideNavProps) => {
         >
             <div className={`flex w-full items-center h-14 border-b border-gray-200 ${collapsed ? 'justify-center px-0' : 'px-6'}`}>
                 {collapsed ? (
-                    <div className={`bg-primary text-white w-8 h-8 flex items-center justify-center text-xs font-bold ${instrument_sans.className}`}>T3D</div>
+                    <div className={`bg-primary text-white w-8 h-8 flex items-center justify-center text-xs font-bold ${instrument_sans.className}`}>t3d</div>
                 ) : (
                     <a href="/" className={`bg-primary text-white py-1 px-4 text-md font-semibold ${instrument_sans.className}`}>tactile3d</a>
                 )}
@@ -49,6 +57,25 @@ const SideNav = ({ user, userData, title }: SideNavProps) => {
                 <Link href="/" className={linkClasses(pathname === "/")} title="All Jobs">
                     {collapsed ? "Jobs" : "All Jobs"}
                 </Link>
+
+                {/* Recent Jobs - Only visible when expanded */}
+                {!collapsed && recentJobs.length > 0 && (
+                    <div className="flex flex-col gap-1">
+                        {recentJobs.slice(0, 5).map((job) => (
+                            <Link
+                                key={job.id}
+                                href={`/jobs/${job.id}`}
+                                className={`text-sm truncate py-1 px-1 -mx-1 transition-colors ${pathname === `/jobs/${job.id}`
+                                    ? 'text-black font-medium'
+                                    : 'text-zinc-500 hover:text-zinc-900'
+                                    }`}
+                                title={job.originalFilename}
+                            >
+                                {job.originalFilename}
+                            </Link>
+                        ))}
+                    </div>
+                )}
             </div>
 
             <div className={`flex flex-col w-full border-b border-gray-200 gap-2 ${collapsed ? 'py-4 items-center px-0' : 'px-6 py-5'}`}>
@@ -77,7 +104,7 @@ const SideNav = ({ user, userData, title }: SideNavProps) => {
             <div className={`mt-auto p-4 border-t border-gray-200 flex ${collapsed ? 'justify-center' : 'justify-start'}`}>
                 <button
                     onClick={toggleCollapse}
-                    className={`cursor-pointer flex items-center text-zinc-400 hover:text-black transition-colors ${collapsed ? 'justify-center w-8 h-8 hover:bg-gray-100 rounded' : 'gap-2 text-sm font-medium'}`}
+                    className={`cursor-pointer flex items-center text-zinc-400 hover:text-black transition-colors ${collapsed ? 'justify-center w-8 h-8 hover:bg-gray-100' : 'gap-2 text-sm font-medium'}`}
                     title={collapsed ? "Expand" : "Collapse"}
                 >
                     <FontAwesomeIcon icon={collapsed ? faChevronRight : faChevronLeft} className="text-xs" />
