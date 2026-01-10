@@ -64,6 +64,16 @@ public class UserService {
         });
     }
 
+    /**
+     * Upgrade a user's subscription tier.
+     */
+    public User upgradeSubscription(String userId, com.shlawgathon.tactile.backend.model.SubscriptionTier newTier) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+        user.setSubscriptionTier(newTier);
+        return userRepository.save(user);
+    }
+
     public void delete(String id) {
         userRepository.deleteById(id);
     }
