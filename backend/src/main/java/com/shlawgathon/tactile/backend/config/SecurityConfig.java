@@ -33,6 +33,7 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/api-docs/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/internal/**").permitAll() // Agent module callbacks (auth handled by filter)
                         .requestMatchers("/api/health").permitAll()
+                        .requestMatchers("/api/files/**").permitAll() // Public file downloads
                         // All other requests require authentication
                         .anyRequest().authenticated())
                 .oauth2Login(oauth2 -> oauth2
