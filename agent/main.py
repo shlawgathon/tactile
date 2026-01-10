@@ -28,10 +28,12 @@ from report_generator import generate_markdown_report
 
 # Optional: Import teammate's analyzer if available
 try:
-    from cad.analyzer import GeometryAnalyzer
+    from cad_tool.source import CADTool
+    from cad_tool.analyze.geometry_analyzer import GeometryAnalyzer
     CAD_ANALYZER_AVAILABLE = True
 except ImportError:
     CAD_ANALYZER_AVAILABLE = False
+    CADTool = None
     GeometryAnalyzer = None
 
 
