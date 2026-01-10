@@ -355,12 +355,29 @@ CNC MACHINING RULES:
         # Handle both naming conventions (LLM sometimes uses underscores)
         if tool_name in ("execute_cadquery_code", "execute_cad_query_code"):
             code = arguments.get("code", "")
+            description = arguments.get("description", "CadQuery analysis")
             # Pass step_file_path for subprocess isolation
             result = await execute_cadquery_code(
                 code, 
                 step_file_path=self.step_file_path,
                 timeout_seconds=30.0
             )
+            
+            # AUTO-STORE MEMORY: Automatically store successful CadQuery results
+            if result.get("success") and self.backend_client:
+                try:
+                    result_data = result.get("result", result.get("output", ""))
+                    memory_content = f"{description}: {result_data}"
+                    await self.backend_client.store_memory(
+                        job_id=self.job_id,
+                        key=f"cadquery_{description[:30].replace(' ', '_').lower()}",
+                        value=memory_content,
+                        category="measurement"
+                    )
+                    logger.info(f"Auto-stored memory for CadQuery: {description[:50]}")
+                except Exception as e:
+                    logger.warning(f"Failed to auto-store CadQuery memory: {e}")
+            
             return result
             
         elif tool_name == "store_memory":
@@ -381,23 +398,44 @@ CNC MACHINING RULES:
             return result
             
         elif tool_name == "give_suggestion":
+            suggestion_text = arguments.get("suggestion", "")
+            priority = arguments.get("priority", 2)
+            
             result = await self.backend_client.give_suggestion(
                 job_id=self.job_id,
-                suggestion=arguments.get("suggestion", ""),
+                suggestion=suggestion_text,
                 issue_id=arguments.get("issue_id"),
-                priority=arguments.get("priority", 2),
+                priority=priority,
                 auto_fix_code=arguments.get("auto_fix_code")
             )
+            
+            # AUTO-STORE MEMORY: Store suggestions as issues in memory
+            if result.get("success") and self.backend_client:
+                try:
+                    priority_label = {1: "HIGH", 2: "MEDIUM", 3: "LOW"}.get(priority, "MEDIUM")
+                    await self.backend_client.store_memory(
+                        job_id=self.job_id,
+                        key=f"suggestion_{arguments.get('issue_id', 'general')}",
+                        value=f"[{priority_label}] {suggestion_text}",
+                        category="issue"
+                    )
+                    logger.info(f"Auto-stored memory for suggestion: {suggestion_text[:50]}")
+                except Exception as e:
+                    logger.warning(f"Failed to auto-store suggestion memory: {e}")
+            
             return result
             
         elif tool_name == "capture_screenshot":
             # Lazy import to avoid circular dep
             from tools.screenshot_renderer import capture_screenshot, read_svg_content
             
+            view = arguments.get("view", "iso")
+            description = arguments.get("description", f"Screenshot from {view} view")
+            
             # Use step_file_path for subprocess isolation
             result = await capture_screenshot(
                 step_file_path=self.step_file_path,
-                view=arguments.get("view", "iso"),
+                view=view,
             )
             
             # If successful, read the SVG content to pass to LLM
@@ -405,6 +443,16 @@ CNC MACHINING RULES:
                 try:
                     svg_content = read_svg_content(result["path"])
                     result["svg_content"] = svg_content
+                    
+                    # AUTO-STORE MEMORY: Store screenshot observation
+                    if self.backend_client:
+                        await self.backend_client.store_memory(
+                            job_id=self.job_id,
+                            key=f"screenshot_{view}",
+                            value=f"Captured {view} view: {description}",
+                            category="observation"
+                        )
+                        logger.info(f"Auto-stored memory for screenshot: {view}")
                 except Exception as e:
                     result["error_reading_content"] = str(e)
                     

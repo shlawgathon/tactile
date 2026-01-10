@@ -8,9 +8,6 @@ import com.shlawgathon.tactile.backend.repository.JobMemoryRepository;
 import com.shlawgathon.tactile.backend.websocket.JobWebSocketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.aggregation.Aggregation;
-import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -29,18 +26,15 @@ public class JobMemoryService {
     private final VoyageEmbeddingService voyageEmbeddingService;
     private final AgentEventService agentEventService;
     private final JobWebSocketHandler webSocketHandler;
-    private final MongoTemplate mongoTemplate;
 
     public JobMemoryService(JobMemoryRepository jobMemoryRepository,
             VoyageEmbeddingService voyageEmbeddingService,
             AgentEventService agentEventService,
-            JobWebSocketHandler webSocketHandler,
-            MongoTemplate mongoTemplate) {
+            JobWebSocketHandler webSocketHandler) {
         this.jobMemoryRepository = jobMemoryRepository;
         this.voyageEmbeddingService = voyageEmbeddingService;
         this.agentEventService = agentEventService;
         this.webSocketHandler = webSocketHandler;
-        this.mongoTemplate = mongoTemplate;
     }
 
     /**

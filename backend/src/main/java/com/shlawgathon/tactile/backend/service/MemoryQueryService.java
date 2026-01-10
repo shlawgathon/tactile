@@ -32,14 +32,15 @@ public class MemoryQueryService {
 
     /**
      * Query the job's memory using RAG.
-     * 
+     *
      * @param jobId     The job ID to query
      * @param userQuery The user's question
      * @return Generated answer based on job memories
      */
     public String queryMemory(String jobId, String userQuery) throws Exception {
         // 1. Find relevant memories using vector search
-        List<JobMemory> relevantMemories = jobMemoryService.searchSimilar(
+        List<JobMemory> relevantMemories = jobMemoryService.
+            searchSimilar(
                 jobId, userQuery, MAX_CONTEXT_MEMORIES);
 
         if (relevantMemories.isEmpty()) {
