@@ -170,7 +170,7 @@ export default function Dashboard() {
 
                         {/* Pagination Controls */}
                         {totalPages > 1 && (
-                            <div className="flex items-center justify-center gap-2">
+                            <div className="flex items-center justify-end gap-2">
                                 <button
                                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                     disabled={currentPage === 1}
