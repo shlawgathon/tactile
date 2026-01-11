@@ -40,10 +40,10 @@ interface UseJobEventsResult {
 
 /**
  * React hook for real-time job event streaming via WebSocket.
- * 
+ *
  * Connects to the public WebSocket endpoint and receives agent events in real-time.
  * Falls back to polling if WebSocket connection fails.
- * 
+ *
  * @param jobId - The job ID to subscribe to
  * @param initialEvents - Optional initial events to start with (from REST API)
  */
@@ -51,10 +51,13 @@ export const useJobEvents = (
     jobId: string | null,
     initialEvents: AgentEvent[] = []
 ): UseJobEventsResult => {
-    const [events, setEvents] = useState<AgentEvent[]>(initialEvents);
+    // Sort initial events by creation time to ensure proper order
+    const [events, setEvents] = useState<AgentEvent[]>(
+        initialEvents.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    );
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
     const [connectionError, setConnectionError] = useState<ConnectionError | null>(null);
-    
+
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -86,7 +89,7 @@ export const useJobEvents = (
     // Poll for events via REST API
     const pollEvents = useCallback(async () => {
         if (!jobId) return;
-        
+
         try {
             const fetchedEvents = await getJobEvents(jobId);
             if (fetchedEvents.length > 0) {
@@ -100,14 +103,14 @@ export const useJobEvents = (
     // Start polling fallback
     const startPolling = useCallback(() => {
         if (isPollingRef.current || !jobId) return;
-        
+
         console.log('[Polling] Starting fallback polling...');
         isPollingRef.current = true;
         setConnectionStatus('polling');
-        
+
         // Initial poll
         pollEvents();
-        
+
         // Set up interval
         pollingIntervalRef.current = setInterval(pollEvents, POLLING_INTERVAL);
     }, [jobId, pollEvents]);
@@ -256,10 +259,19 @@ export const useJobEvents = (
 
     // Update events when initialEvents changes
     useEffect(() => {
-        if (initialEvents.length > 0) {
-            mergeEvents(initialEvents);
+            if (initialEvents.length > 0) {
+            // Sort and set initial events, ensuring old events appear first
+            setEvents(prev => {
+                const allEvents = [...initialEvents, ...prev];
+                const uniqueEvents = Array.from(
+                    new Map(allEvents.map(e => [e.id, e])).values()
+                );
+                return uniqueEvents.sort(
+                    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+                );
+            });
         }
-    }, [initialEvents, mergeEvents]);
+    }, [initialEvents]);
 
     return {
         events,

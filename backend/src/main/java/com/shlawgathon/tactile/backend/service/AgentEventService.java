@@ -4,9 +4,8 @@ import com.shlawgathon.tactile.backend.dto.AgentEventRequest;
 import com.shlawgathon.tactile.backend.dto.AgentEventResponse;
 import com.shlawgathon.tactile.backend.model.AgentEvent;
 import com.shlawgathon.tactile.backend.model.AgentEventType;
+import com.shlawgathon.tactile.backend.pubsub.JobEventPublisher;
 import com.shlawgathon.tactile.backend.repository.AgentEventRepository;
-import com.shlawgathon.tactile.backend.websocket.JobWebSocketHandler;
-import com.shlawgathon.tactile.backend.websocket.PublicJobWebSocketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -17,6 +16,7 @@ import java.util.stream.Collectors;
 
 /**
  * Service for managing agent events and broadcasting to WebSocket clients.
+ * Uses Redis Pub/Sub for distributed event broadcasting across all pods.
  */
 @Service
 public class AgentEventService {
@@ -24,15 +24,12 @@ public class AgentEventService {
     private static final Logger log = LoggerFactory.getLogger(AgentEventService.class);
 
     private final AgentEventRepository agentEventRepository;
-    private final JobWebSocketHandler webSocketHandler;
-    private final PublicJobWebSocketHandler publicWebSocketHandler;
+    private final JobEventPublisher jobEventPublisher;
 
     public AgentEventService(AgentEventRepository agentEventRepository,
-            JobWebSocketHandler webSocketHandler,
-            PublicJobWebSocketHandler publicWebSocketHandler) {
+            JobEventPublisher jobEventPublisher) {
         this.agentEventRepository = agentEventRepository;
-        this.webSocketHandler = webSocketHandler;
-        this.publicWebSocketHandler = publicWebSocketHandler;
+        this.jobEventPublisher = jobEventPublisher;
     }
 
     /**
@@ -59,13 +56,16 @@ public class AgentEventService {
                 .build();
 
         event = agentEventRepository.save(event);
-        log.info("[AGENT] Saved event: {} | Broadcasting to WebSocket", event.getId());
+        log.info("[AGENT] Saved event: {} | Publishing to Redis Pub/Sub", event.getId());
 
-        // Broadcast to internal WebSocket clients (agent module)
-        webSocketHandler.sendAgentEvent(jobId, event);
-
-        // Broadcast to public WebSocket clients (frontend)
-        publicWebSocketHandler.sendAgentEvent(jobId, event);
+        // Publish to Redis Pub/Sub for distribution to all pods
+        jobEventPublisher.publishEvent(jobId, "AGENT_EVENT", Map.of(
+                "eventId", event.getId(),
+                "eventType", event.getType().name(),
+                "title", event.getTitle() != null ? event.getTitle() : "",
+                "content", event.getContent() != null ? event.getContent() : "",
+                "metadata", event.getMetadata() != null ? event.getMetadata() : Map.of(),
+                "createdAt", event.getCreatedAt() != null ? event.getCreatedAt().toString() : ""));
 
         return event;
     }

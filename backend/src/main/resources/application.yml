@@ -20,6 +20,16 @@ spring:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/tactile}
       database: ${MONGODB_DATABASE:tactile}
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+  session:
+    store-type: redis
+    timeout: 24h
+    redis:
+      namespace: tactile:sessions
 
   security:
     oauth2:
