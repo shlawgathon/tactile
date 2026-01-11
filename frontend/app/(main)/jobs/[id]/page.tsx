@@ -23,7 +23,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { Instrument_Sans } from "next/font/google";
 import { Panel, Group, Separator } from 'react-resizable-panels';
-import { getJob, getFileUrl, Job, getJobEvents, AgentEvent, queryJobMemory, deleteJob } from '../../../../services/jobs';
+import { getJob, getFileUrl, Job, getJobEvents, AgentEvent, queryJobMemory, deleteJob, getJobAnalysisResults, AnalysisResult } from '../../../../services/jobs';
 import { useJobEvents, ConnectionStatus, ConnectionError } from '../../../../hooks/useJobEvents';
 import StepViewer from '../../../../components/StepViewer';
 import {C1Component} from "@thesysai/genui-sdk";
@@ -52,6 +52,7 @@ export default function JobPage() {
     const [initialEvents, setInitialEvents] = useState<AgentEvent[]>([]);
     const bottomPanelRef = useRef<any>(null);
     const [bottomPanelCollapsed, setBottomPanelCollapsed] = useState(false);
+    const [activeTab, setActiveTab] = useState<'chat' | 'events'>('chat');
 
     // Settings state
     const [showSettings, setShowSettings] = useState(false);
@@ -296,29 +297,96 @@ export default function JobPage() {
 
                             <Separator className="w-1 bg-zinc-200 hover:bg-zinc-300 transition-colors cursor-col-resize" />
 
-                            {/* Right: Markdown Documentation */}
+                            {/* Right: Markdown Documentation or Live Events */}
                             <Panel defaultSize={50} minSize={20} className="bg-white flex flex-col">
                                 <div className="h-10 border-b border-zinc-100 flex items-center justify-between px-4 bg-zinc-50 shrink-0">
                                     <div className="flex items-center gap-2">
-                                        <FontAwesomeIcon icon={faFileAlt} className="text-zinc-400 text-xs" />
-                                        <span className="text-[11px] font-semibold text-zinc-600 uppercase tracking-wider">Analysis Report</span>
+                                        {analysisResult?.markdownReport ? (
+                                            <>
+                                                <FontAwesomeIcon icon={faFileAlt} className="text-zinc-400 text-xs" />
+                                                <span className="text-[11px] font-semibold text-zinc-600 uppercase tracking-wider">Analysis Report</span>
+                                                <span className="text-[10px] text-zinc-400 font-mono">analysis.md</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <FontAwesomeIcon icon={faTerminal} className="text-[10px] text-zinc-400" />
+                                                <span className="text-xs font-semibold text-primary">Live Agent Feed</span>
+                                                <span className={`flex items-center gap-1.5 ml-2 px-1.5 py-0.5 bg-zinc-100 rounded text-[9px] ${isConnected ? 'text-green-600' : 'text-zinc-400'}`}>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-zinc-300'}`}></span>
+                                                    {isConnected ? 'LIVE' : 'OFFLINE'}
+                                                </span>
+                                            </>
+                                        )}
                                     </div>
-                                    <span className="text-[10px] text-zinc-400 font-mono">analysis.md</span>
                                 </div>
-                                <div className="flex-1 overflow-y-auto p-8">
-                                    <div className="prose prose-sm prose-zinc max-w-none 
-                                        prose-headings:text-zinc-900 prose-headings:font-bold
-                                        prose-h1:text-xl prose-h1:mb-6 prose-h1:pb-2 prose-h1:border-b prose-h1:border-zinc-100
-                                        prose-h2:text-sm prose-h2:uppercase prose-h2:tracking-wider prose-h2:text-zinc-500 prose-h2:mt-8 prose-h2:mb-4
-                                        prose-p:text-zinc-600 prose-p:leading-relaxed
-                                        prose-table:border prose-table:border-zinc-100 prose-table:rounded-lg prose-table:overflow-hidden
-                                        prose-thead:bg-zinc-50 prose-th:px-4 prose-th:py-2 prose-th:text-zinc-700
-                                        prose-td:px-4 prose-td:py-2 prose-td:border-t prose-td:border-zinc-50
-                                        prose-code:bg-zinc-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-zinc-800
-                                        prose-pre:bg-zinc-900 prose-pre:text-zinc-100 prose-pre:p-4 prose-pre:rounded-none
-                                    ">
-                                        <ReactMarkdown>{placeholderMarkdown}</ReactMarkdown>
-                                    </div>
+                                <div className="flex-1 overflow-hidden">
+                                    {analysisResult?.markdownReport ? (
+                                        <div className="flex-1 overflow-y-auto p-8">
+                                            <div className="prose prose-sm prose-zinc max-w-none 
+                                                prose-headings:text-zinc-900 prose-headings:font-bold
+                                                prose-h1:text-xl prose-h1:mb-6 prose-h1:pb-2 prose-h1:border-b prose-h1:border-zinc-100
+                                                prose-h2:text-sm prose-h2:uppercase prose-h2:tracking-wider prose-h2:text-zinc-500 prose-h2:mt-8 prose-h2:mb-4
+                                                prose-p:text-zinc-600 prose-p:leading-relaxed
+                                                prose-table:border prose-table:border-zinc-100 prose-table:rounded-lg prose-table:overflow-hidden
+                                                prose-thead:bg-zinc-50 prose-th:px-4 prose-th:py-2 prose-th:text-zinc-700
+                                                prose-td:px-4 prose-td:py-2 prose-td:border-t prose-td:border-zinc-50
+                                                prose-code:bg-zinc-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-zinc-800
+                                                prose-pre:bg-zinc-900 prose-pre:text-zinc-100 prose-pre:p-4 prose-pre:rounded-none
+                                            ">
+                                                <ReactMarkdown>{analysisResult.markdownReport}</ReactMarkdown>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 overflow-hidden bg-white">
+                                            {events.length === 0 ? (
+                                                <div className="flex flex-col items-center justify-center h-full py-12 text-zinc-300">
+                                                    <FontAwesomeIcon icon={faBolt} className="text-2xl mb-3 opacity-20" />
+                                                    <span className="text-[9px] font-bold tracking-[0.2em] uppercase">No events logged</span>
+                                                </div>
+                                            ) : (
+                                                <Group orientation="horizontal" className="h-full">
+                                                    {events.map((event, index) => (
+                                                        <React.Fragment key={event.id}>
+                                                            <Panel defaultSize={events.length > 0 ? 100 / events.length : 100} minSize={15} className="flex flex-col border-r border-zinc-200 overflow-hidden">
+                                                                <div className="h-8 border-b border-zinc-100 flex items-center justify-between px-3 bg-zinc-50 shrink-0">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className={`w-1.5 h-1.5 rounded-full ${event.type === 'ERROR' ? 'bg-red-500' :
+                                                                            event.type === 'SUCCESS' ? 'bg-green-500' :
+                                                                                event.type === 'THINKING' ? 'bg-yellow-400 animate-pulse' :
+                                                                                    'bg-blue-500'
+                                                                            }`}></div>
+                                                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${event.type === 'ERROR' ? 'bg-red-50 text-red-500' :
+                                                                            event.type === 'SUCCESS' ? 'bg-green-50 text-green-600' :
+                                                                                event.type === 'THINKING' ? 'bg-yellow-50 text-yellow-600' :
+                                                                                    'bg-blue-50 text-blue-600'
+                                                                            }`}>
+                                                                            {event.type}
+                                                                        </span>
+                                                                        <span className="text-[10px] font-bold text-zinc-700 truncate">{event.title}</span>
+                                                                    </div>
+                                                                    <span className="text-[9px] text-zinc-400 font-mono shrink-0">
+                                                                        {new Date(event.createdAt).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex-1 overflow-y-auto px-3 py-2 font-mono">
+                                                                    {event.content ? (
+                                                                        <p className="text-[10px] text-zinc-600 whitespace-pre-wrap leading-relaxed">
+                                                                            {event.content}
+                                                                        </p>
+                                                                    ) : (
+                                                                        <p className="text-[10px] text-zinc-400 italic">No content</p>
+                                                                    )}
+                                                                </div>
+                                                            </Panel>
+                                                            {index < events.length - 1 && (
+                                                                <Separator className="w-1 bg-zinc-200 hover:bg-zinc-300 transition-colors cursor-col-resize" />
+                                                            )}
+                                                        </React.Fragment>
+                                                    ))}
+                                                </Group>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </Panel>
                         </Group>
@@ -352,7 +420,7 @@ export default function JobPage() {
                         </button>
                     </Separator>
 
-                    {/* Bottom Half: AI Chat + Live Events (Side by Side) */}
+                    {/* Bottom Half: AI Chat + Live Events (Tabs) */}
                     <Panel 
                         panelRef={bottomPanelRef}
                         defaultSize={50} 
@@ -361,201 +429,213 @@ export default function JobPage() {
                         collapsedSize={50}
                         className="flex flex-col bg-white border-t border-zinc-200"
                     >
-                        <Group orientation="horizontal" className="flex-1">
-                            {/* Left: AI Assistant Chat */}
-                            <Panel defaultSize={50} minSize={20} className="flex flex-col bg-white">
-                                {/* AI Assistant Header */}
-                                <div className="h-11 border-b border-zinc-200 flex items-center justify-between px-6 bg-white shrink-0">
-                                    <div className="flex items-center gap-2">
-                                        <FontAwesomeIcon icon={faMessage} className="text-[10px] text-zinc-400" />
-                                        <span className="text-xs font-semibold text-zinc-900">AI Assistant</span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <button className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors cursor-pointer" title="Chat History">
-                                            <FontAwesomeIcon icon={faHistory} className="text-xs" />
-                                        </button>
-                                        <button
-                                            onClick={() => setMessages([])}
-                                            className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors cursor-pointer"
-                                            title="New Discussion"
-                                        >
-                                            <FontAwesomeIcon icon={faPlus} className="text-xs" />
-                                        </button>
-                                    </div>
+                        {/* Tab Navigation */}
+                        <div className="h-11 border-b border-zinc-200 flex items-center bg-white shrink-0">
+                            <button
+                                onClick={() => setActiveTab('chat')}
+                                className={`h-full px-6 flex items-center gap-2 border-b-2 transition-colors ${
+                                    activeTab === 'chat'
+                                        ? 'border-zinc-900 text-zinc-900'
+                                        : 'border-transparent text-zinc-500 hover:text-zinc-700'
+                                }`}
+                            >
+                                <FontAwesomeIcon icon={faMessage} className="text-[10px]" />
+                                <span className="text-xs font-semibold">AI Assistant</span>
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('events')}
+                                className={`h-full px-6 flex items-center gap-2 border-b-2 transition-colors ${
+                                    activeTab === 'events'
+                                        ? 'border-primary text-primary'
+                                        : 'border-transparent text-zinc-500 hover:text-zinc-700'
+                                }`}
+                            >
+                                <FontAwesomeIcon icon={faTerminal} className="text-[10px]" />
+                                <span className="text-xs font-semibold">Live Agent Feed</span>
+                                <span className={`flex items-center gap-1.5 ml-2 px-1.5 py-0.5 bg-zinc-100 rounded text-[9px] ${isConnected ? 'text-green-600' : 'text-zinc-400'}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-zinc-300'}`}></span>
+                                    {isConnected ? 'LIVE' : 'OFFLINE'}
+                                </span>
+                            </button>
+                            {activeTab === 'chat' && (
+                                <div className="ml-auto flex items-center gap-1 pr-6">
+                                    <button className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors cursor-pointer" title="Chat History">
+                                        <FontAwesomeIcon icon={faHistory} className="text-xs" />
+                                    </button>
+                                    <button
+                                        onClick={() => setMessages([])}
+                                        className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors cursor-pointer"
+                                        title="New Discussion"
+                                    >
+                                        <FontAwesomeIcon icon={faPlus} className="text-xs" />
+                                    </button>
                                 </div>
+                            )}
+                        </div>
 
-                                {/* Chat Content */}
-                                <div className="flex-1 flex flex-col overflow-hidden bg-zinc-50/20">
-                                    <div className="flex-1 flex flex-col w-full px-6 overflow-hidden">
-                                        <div className="flex-1 overflow-y-auto flex flex-col">
-                                            {messages.length > 0 ? (
-                                                <div className="py-4 flex flex-col gap-3">
-                                                    {messages.map((msg, idx) => (
-                                                        <div key={idx} className="flex justify-start">
-                                                            <div className={`max-w-[75%] ${msg.role === 'user'
-                                                                ? 'bg-zinc-900 text-white rounded-lg p-3'
-                                                                : 'text-zinc-800'
-                                                                }`}>
-                                                                {msg.role === 'user' && (
-                                                                    <div className="text-[9px] font-bold uppercase tracking-widest mb-1 opacity-50">
-                                                                        You
-                                                                    </div>
-                                                                )}
-                                                                {msg.role === 'ai' ? (
-                                                                    <div className="text-xs leading-relaxed prose prose-sm prose-zinc max-w-none prose-invert-0 prose-p:my-1 prose-headings:my-2">
-                                                                        <ReactMarkdown>{msg.content}</ReactMarkdown>
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="text-xs leading-relaxed whitespace-pre-wrap">
-                                                                        {msg.content}
-                                                                    </div>
-                                                                )}
+                        {/* Tab Content */}
+                        <div className="flex-1 overflow-hidden">
+                            {activeTab === 'chat' ? (
+                                <div className="flex flex-col h-full bg-white">
+
+                                    {/* Chat Content */}
+                                    <div className="flex-1 flex flex-col overflow-hidden bg-zinc-50/20">
+                                        <div className="flex-1 flex flex-col w-full px-6 overflow-hidden">
+                                            <div className="flex-1 overflow-y-auto flex flex-col">
+                                                {messages.length > 0 ? (
+                                                    <div className="py-4 flex flex-col gap-3">
+                                                        {messages.map((msg, idx) => (
+                                                            <div key={idx} className="flex justify-start">
+                                                                <div className={`max-w-[75%] ${msg.role === 'user'
+                                                                    ? 'bg-zinc-900 text-white rounded-lg p-3'
+                                                                    : 'text-zinc-800'
+                                                                    }`}>
+                                                                    {msg.role === 'user' && (
+                                                                        <div className="text-[9px] font-bold uppercase tracking-widest mb-1 opacity-50">
+                                                                            You
+                                                                        </div>
+                                                                    )}
+                                                                    {msg.role === 'ai' ? (
+                                                                        <div className="text-xs leading-relaxed prose prose-sm prose-zinc max-w-none prose-invert-0 prose-p:my-1 prose-headings:my-2">
+                                                                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="text-xs leading-relaxed whitespace-pre-wrap">
+                                                                            {msg.content}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    ))}
-                                                    {isLoading && (
-                                                        <div className="flex justify-start">
-                                                            <div className="bg-white border border-zinc-200 rounded-lg p-3 flex items-center gap-2">
-                                                                <FontAwesomeIcon icon={faSpinner} className="animate-spin text-primary text-xs" />
-                                                                <span className="text-[10px] text-zinc-500 font-medium">Processing...</span>
+                                                        ))}
+                                                        {isLoading && (
+                                                            <div className="flex justify-start">
+                                                                <div className="bg-white border border-zinc-200 rounded-lg p-3 flex items-center gap-2">
+                                                                    <FontAwesomeIcon icon={faSpinner} className="animate-spin text-primary text-xs" />
+                                                                    <span className="text-[10px] text-zinc-500 font-medium">Processing...</span>
+                                                                </div>
                                                             </div>
+                                                        )}
+                                                        <div className="h-2 shrink-0"></div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col justify-center h-full w-1/2 opacity-0 animate-[fadeIn_0.5s_ease-in-out_0.2s_forwards]">
+                                                        <span className="mb-3 text-zinc-500 text-sm">Get started with a prompt</span>
+                                                        <div className="flex flex-col gap-2">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setInputValue("What are the key manufacturing considerations for this model?");
+                                                                    (document.querySelector('input[type="text"]') as HTMLInputElement)?.focus();
+                                                                }}
+                                                                className="text-left px-4 py-1 text-xs text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300 transition-all cursor-pointer"
+                                                            >
+                                                                What are the key manufacturing considerations for this model?
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setInputValue("What material would work best for this part?");
+                                                                    (document.querySelector('input[type="text"]') as HTMLInputElement)?.focus();
+                                                                }}
+                                                                className="text-left px-4 py-1 text-xs text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300 transition-all cursor-pointer"
+                                                            >
+                                                                What material would work best for this part?
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setInputValue("Are there any design issues I should be aware of?");
+                                                                    (document.querySelector('input[type="text"]') as HTMLInputElement)?.focus();
+                                                                }}
+                                                                className="text-left px-4 py-1 text-xs text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300 transition-all cursor-pointer"
+                                                            >
+                                                                Are there any design issues I should be aware of?
+                                                            </button>
                                                         </div>
-                                                    )}
-                                                    <div className="h-2 shrink-0"></div>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col justify-center h-full w-1/2 opacity-0 animate-[fadeIn_0.5s_ease-in-out_0.2s_forwards]">
-                                                    <span className="mb-3 text-zinc-500 text-sm">Get started with a prompt</span>
-                                                    <div className="flex flex-col gap-2">
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="py-3 bg-transparent border-t border-zinc-200 shrink-0">
+                                                <div className="relative group">
+                                                    <div className="relative flex items-center border border-zinc-200 bg-white focus-within:border-zinc-400 transition-all duration-200 rounded">
+                                                        <input
+                                                            type="text"
+                                                            className="w-full bg-transparent text-xs p-3 pr-10 focus:outline-none placeholder:text-zinc-400"
+                                                            placeholder={isLoading ? "AI is thinking..." : "Ask a technical follow-up..."}
+                                                            value={inputValue}
+                                                            onChange={(e) => setInputValue(e.target.value)}
+                                                            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                                                            disabled={isLoading}
+                                                        />
                                                         <button
-                                                            onClick={() => {
-                                                                setInputValue("What are the key manufacturing considerations for this model?");
-                                                                (document.querySelector('input[type="text"]') as HTMLInputElement)?.focus();
-                                                            }}
-                                                            className="text-left px-4 py-1 text-xs text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300 transition-all cursor-pointer"
+                                                            onClick={handleSendMessage}
+                                                            disabled={isLoading}
+                                                            className={`absolute right-2 h-7 w-7 transition-all flex items-center justify-center rounded ${isLoading
+                                                                ? 'text-zinc-300'
+                                                                : 'text-zinc-100 bg-zinc-900 hover:bg-black cursor-pointer'
+                                                                }`}
                                                         >
-                                                            What are the key manufacturing considerations for this model?
-                                                        </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                setInputValue("What material would work best for this part?");
-                                                                (document.querySelector('input[type="text"]') as HTMLInputElement)?.focus();
-                                                            }}
-                                                            className="text-left px-4 py-1 text-xs text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300 transition-all cursor-pointer"
-                                                        >
-                                                            What material would work best for this part?
-                                                        </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                setInputValue("Are there any design issues I should be aware of?");
-                                                                (document.querySelector('input[type="text"]') as HTMLInputElement)?.focus();
-                                                            }}
-                                                            className="text-left px-4 py-1 text-xs text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300 transition-all cursor-pointer"
-                                                        >
-                                                            Are there any design issues I should be aware of?
+                                                            <FontAwesomeIcon icon={faPaperPlane} className="text-[9px]" />
                                                         </button>
                                                     </div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="py-3 bg-transparent border-t border-zinc-200 shrink-0">
-                                            <div className="relative group">
-                                                <div className="relative flex items-center border border-zinc-200 bg-white focus-within:border-zinc-400 transition-all duration-200 rounded">
-                                                    <input
-                                                        type="text"
-                                                        className="w-full bg-transparent text-xs p-3 pr-10 focus:outline-none placeholder:text-zinc-400"
-                                                        placeholder={isLoading ? "AI is thinking..." : "Ask a technical follow-up..."}
-                                                        value={inputValue}
-                                                        onChange={(e) => setInputValue(e.target.value)}
-                                                        onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                                                        disabled={isLoading}
-                                                    />
-                                                    <button
-                                                        onClick={handleSendMessage}
-                                                        disabled={isLoading}
-                                                        className={`absolute right-2 h-7 w-7 transition-all flex items-center justify-center rounded ${isLoading
-                                                            ? 'text-zinc-300'
-                                                            : 'text-zinc-100 bg-zinc-900 hover:bg-black cursor-pointer'
-                                                            }`}
-                                                    >
-                                                        <FontAwesomeIcon icon={faPaperPlane} className="text-[9px]" />
-                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            </Panel>
-
-                            <Separator className="w-1 bg-zinc-200 hover:bg-zinc-300 transition-colors cursor-col-resize" />
-
-                            {/* Right: Live Agent Feed */}
-                            <Panel defaultSize={50} minSize={20} className="flex flex-col bg-white">
-                                {/* Live Agent Feed Header */}
-                                <div className="h-11 border-b border-zinc-200 flex items-center justify-between px-6 bg-white shrink-0">
-                                    <div className="flex items-center gap-2">
-                                        <FontAwesomeIcon icon={faTerminal} className="text-[10px] text-zinc-400" />
-                                        <span className="text-xs font-semibold text-primary">Live Agent Feed</span>
-                                        <span className={`flex items-center gap-1.5 ml-2 px-1.5 py-0.5 bg-zinc-100 rounded text-[9px] ${isConnected ? 'text-green-600' : 'text-zinc-400'}`}>
-                                            <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-zinc-300'}`}></span>
-                                            {isConnected ? 'LIVE' : 'OFFLINE'}
-                                        </span>
+                            ) : (
+                                <div className="flex flex-col h-full bg-white">
+                                    {/* Feed Content - Horizontal Scrollable Panels */}
+                                    <div className="flex-1 overflow-hidden bg-white">
+                                        {events.length === 0 ? (
+                                            <div className="flex flex-col items-center justify-center h-full py-12 text-zinc-300">
+                                                <FontAwesomeIcon icon={faBolt} className="text-2xl mb-3 opacity-20" />
+                                                <span className="text-[9px] font-bold tracking-[0.2em] uppercase">No events logged</span>
+                                            </div>
+                                        ) : (
+                                            <Group orientation="horizontal" className="h-full">
+                                                {events.map((event, index) => (
+                                                    <React.Fragment key={event.id}>
+                                                        <Panel defaultSize={events.length > 0 ? 100 / events.length : 100} minSize={15} className="flex flex-col border-r border-zinc-200 overflow-hidden">
+                                                            <div className="h-8 border-b border-zinc-100 flex items-center justify-between px-3 bg-zinc-50 shrink-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className={`w-1.5 h-1.5 rounded-full ${event.type === 'ERROR' ? 'bg-red-500' :
+                                                                        event.type === 'SUCCESS' ? 'bg-green-500' :
+                                                                            event.type === 'THINKING' ? 'bg-yellow-400 animate-pulse' :
+                                                                                'bg-blue-500'
+                                                                        }`}></div>
+                                                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${event.type === 'ERROR' ? 'bg-red-50 text-red-500' :
+                                                                        event.type === 'SUCCESS' ? 'bg-green-50 text-green-600' :
+                                                                            event.type === 'THINKING' ? 'bg-yellow-50 text-yellow-600' :
+                                                                                'bg-blue-50 text-blue-600'
+                                                                        }`}>
+                                                                        {event.type}
+                                                                    </span>
+                                                                    <span className="text-[10px] font-bold text-zinc-700 truncate">{event.title}</span>
+                                                                </div>
+                                                                <span className="text-[9px] text-zinc-400 font-mono shrink-0">
+                                                                    {new Date(event.createdAt).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex-1 overflow-y-auto px-3 py-2 font-mono">
+                                                                {event.content ? (
+                                                                    <p className="text-[10px] text-zinc-600 whitespace-pre-wrap leading-relaxed">
+                                                                        {event.content}
+                                                                    </p>
+                                                                ) : (
+                                                                    <p className="text-[10px] text-zinc-400 italic">No content</p>
+                                                                )}
+                                                            </div>
+                                                        </Panel>
+                                                        {index < events.length - 1 && (
+                                                            <Separator className="w-1 bg-zinc-200 hover:bg-zinc-300 transition-colors cursor-col-resize" />
+                                                        )}
+                                                    </React.Fragment>
+                                                ))}
+                                            </Group>
+                                        )}
                                     </div>
                                 </div>
-
-                                {/* Feed Content - Horizontal Scrollable Panels */}
-                                <div className="flex-1 overflow-hidden bg-white">
-                                    {events.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center h-full py-12 text-zinc-300">
-                                            <FontAwesomeIcon icon={faBolt} className="text-2xl mb-3 opacity-20" />
-                                            <span className="text-[9px] font-bold tracking-[0.2em] uppercase">No events logged</span>
-                                        </div>
-                                    ) : (
-                                        <Group orientation="horizontal" className="h-full">
-                                            {events.map((event, index) => (
-                                                <React.Fragment key={event.id}>
-                                                    <Panel defaultSize={events.length > 0 ? 100 / events.length : 100} minSize={15} className="flex flex-col border-r border-zinc-200 overflow-hidden">
-                                                        <div className="h-8 border-b border-zinc-100 flex items-center justify-between px-3 bg-zinc-50 shrink-0">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className={`w-1.5 h-1.5 rounded-full ${event.type === 'ERROR' ? 'bg-red-500' :
-                                                                    event.type === 'SUCCESS' ? 'bg-green-500' :
-                                                                        event.type === 'THINKING' ? 'bg-yellow-400 animate-pulse' :
-                                                                            'bg-blue-500'
-                                                                    }`}></div>
-                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${event.type === 'ERROR' ? 'bg-red-50 text-red-500' :
-                                                                    event.type === 'SUCCESS' ? 'bg-green-50 text-green-600' :
-                                                                        event.type === 'THINKING' ? 'bg-yellow-50 text-yellow-600' :
-                                                                            'bg-blue-50 text-blue-600'
-                                                                    }`}>
-                                                                    {event.type}
-                                                                </span>
-                                                                <span className="text-[10px] font-bold text-zinc-700 truncate">{event.title}</span>
-                                                            </div>
-                                                            <span className="text-[9px] text-zinc-400 font-mono shrink-0">
-                                                                {new Date(event.createdAt).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex-1 overflow-y-auto px-3 py-2 font-mono">
-                                                            {event.content ? (
-                                                                <p className="text-[10px] text-zinc-600 whitespace-pre-wrap leading-relaxed">
-                                                                    {event.content}
-                                                                </p>
-                                                            ) : (
-                                                                <p className="text-[10px] text-zinc-400 italic">No content</p>
-                                                            )}
-                                                        </div>
-                                                    </Panel>
-                                                    {index < events.length - 1 && (
-                                                        <Separator className="w-1 bg-zinc-200 hover:bg-zinc-300 transition-colors cursor-col-resize" />
-                                                    )}
-                                                </React.Fragment>
-                                            ))}
-                                        </Group>
-                                    )}
-                                </div>
-                            </Panel>
-                        </Group>
+                            )}
+                        </div>
                     </Panel>
                 </Group>
             </div>
