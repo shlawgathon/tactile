@@ -82,13 +82,13 @@ flowchart LR
 
 ## How to Use
 
-1. **Export**: Export your CAD design as a `.step` file in Fusion 360.
-2. **Upload**: Upload the `.step` file to the platform.
-3. **Critique**: Let the AI agents analyze and critique your design for DFM and performance.
-4. **Update**: Update your design based on the AI's suggestions.
-5. **Repeat**: Repeat steps 2-4 until your design is optimized.
-6. **Chat**: Chat with the AI to get more insights and suggestions.
-7. **Report**: Generate a report of your design's DFM and performance.
+1. Export your CAD design as a `.step` file in Fusion 360.
+2. Upload the `.step` file to the platform.
+3. Let the AI agents analyze and critique your design for DFM and performance.
+4. Update your design based on the AI's suggestions.
+5. Repeat steps 2-4 until your design is optimized.
+6. Chat with the AI to get more insights and suggestions.
+7. Generate a report of your design's DFM and performance.
 
 ## Tech Stack
 
@@ -97,4 +97,3 @@ flowchart LR
 - AI: FastAPI + PARSE + Fireworks AI + Voyage Embeddings + Thesys C1
 - Payments: Coinbase CDP x402
 - Authentication: GitHub OAuth
-
