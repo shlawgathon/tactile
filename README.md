@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="frontend/icon.png" alt="tactile3d logo" width="200" />
+  <img src="frontend/icon.png" alt="tactile3d logo" width="200" /><br />
+  <br />
+  <i>The ultimate CAD analysis and update platform.</i>
 </p>
-
 
 # tactile3d
 
 ![tactile3d.png](tactile3d.png)
-The ultimate CAD analysis and update platform.
 
 ## System Architecture (Mermaid)
 
