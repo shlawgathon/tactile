@@ -20,9 +20,10 @@ import {
     faTerminal
 } from "@fortawesome/free-solid-svg-icons";
 import { Instrument_Sans } from "next/font/google";
-import { getJob, getFileUrl, Job, getJobEvents, AgentEvent, queryJobMemory, deleteJob } from '../../../../services/jobs';
+import { getJob, getFileUrl, Job, getJobEvents, AgentEvent, queryJobMemory, deleteJob, getJobAnalysisResults, AnalysisResult } from '../../../../services/jobs';
 import { useJobEvents, ConnectionStatus, ConnectionError } from '../../../../hooks/useJobEvents';
 import StepViewer from '../../../../components/StepViewer';
+import { GenUI } from '@thesysai/genui-sdk';
 
 const instrument_sans = Instrument_Sans({
     weight: ["400", "500", "600"],
@@ -82,6 +83,8 @@ export default function JobPage() {
     const [job, setJob] = useState<Job | null>(null);
     const [loading, setLoading] = useState(true);
     const [initialEventsLoaded, setInitialEventsLoaded] = useState(false);
+    const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+    const [loadingAnalysis, setLoadingAnalysis] = useState(false);
 
     // Chat state
     const [messages, setMessages] = useState<{ role: 'user' | 'ai', content: string }[]>([]);
@@ -116,6 +119,17 @@ export default function JobPage() {
                 setInitialEvents(eventsData);
                 setInitialEventsLoaded(true);
                 setLoading(false);
+
+                // Fetch analysis results if job is completed
+                if (jobData && (jobData.status === 'COMPLETED' || jobData.status === 'completed')) {
+                    setLoadingAnalysis(true);
+                    getJobAnalysisResults(id).then((result) => {
+                        setAnalysisResult(result);
+                        setLoadingAnalysis(false);
+                    }).catch(() => {
+                        setLoadingAnalysis(false);
+                    });
+                }
             }).catch((error) => {
                 console.error('Failed to load job data:', error);
                 setLoading(false);
@@ -321,29 +335,56 @@ export default function JobPage() {
                         )}
                     </div>
 
-                    {/* Right: Markdown Documentation */}
+                    {/* Right: Analysis Report */}
                     <div className="w-1/2 bg-white flex flex-col border-l border-zinc-200">
                         <div className="h-10 border-b border-zinc-100 flex items-center justify-between px-4 bg-zinc-50 shrink-0">
                             <div className="flex items-center gap-2">
                                 <FontAwesomeIcon icon={faFileAlt} className="text-zinc-400 text-xs" />
                                 <span className="text-[11px] font-semibold text-zinc-600 uppercase tracking-wider">Analysis Report</span>
                             </div>
-                            <span className="text-[10px] text-zinc-400 font-mono">analysis.md</span>
+                            <span className="text-[10px] text-zinc-400 font-mono">
+                                {analysisResult?.c1UiReport ? 'ai-generated' : 'analysis.md'}
+                            </span>
                         </div>
                         <div className="flex-1 overflow-y-auto p-8">
-                            <div className="prose prose-sm prose-zinc max-w-none 
-                                prose-headings:text-zinc-900 prose-headings:font-bold
-                                prose-h1:text-xl prose-h1:mb-6 prose-h1:pb-2 prose-h1:border-b prose-h1:border-zinc-100
-                                prose-h2:text-sm prose-h2:uppercase prose-h2:tracking-wider prose-h2:text-zinc-500 prose-h2:mt-8 prose-h2:mb-4
-                                prose-p:text-zinc-600 prose-p:leading-relaxed
-                                prose-table:border prose-table:border-zinc-100 prose-table:rounded-lg prose-table:overflow-hidden
-                                prose-thead:bg-zinc-50 prose-th:px-4 prose-th:py-2 prose-th:text-zinc-700
-                                prose-td:px-4 prose-td:py-2 prose-td:border-t prose-td:border-zinc-50
-                                prose-code:bg-zinc-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-zinc-800
-                                prose-pre:bg-zinc-900 prose-pre:text-zinc-100 prose-pre:p-4 prose-pre:rounded-none
-                            ">
-                                <ReactMarkdown>{placeholderMarkdown}</ReactMarkdown>
-                            </div>
+                            {loadingAnalysis ? (
+                                <div className="flex items-center justify-center h-full">
+                                    <div className="flex items-center gap-3">
+                                        <FontAwesomeIcon icon={faSpinner} className="animate-spin text-primary" />
+                                        <span className="text-sm text-zinc-500">Loading analysis...</span>
+                                    </div>
+                                </div>
+                            ) : analysisResult?.c1UiReport ? (
+                                <GenUI content={analysisResult.c1UiReport} />
+                            ) : analysisResult?.markdownReport ? (
+                                <div className="prose prose-sm prose-zinc max-w-none
+                                    prose-headings:text-zinc-900 prose-headings:font-bold
+                                    prose-h1:text-xl prose-h1:mb-6 prose-h1:pb-2 prose-h1:border-b prose-h1:border-zinc-100
+                                    prose-h2:text-sm prose-h2:uppercase prose-h2:tracking-wider prose-h2:text-zinc-500 prose-h2:mt-8 prose-h2:mb-4
+                                    prose-p:text-zinc-600 prose-p:leading-relaxed
+                                    prose-table:border prose-table:border-zinc-100 prose-table:rounded-lg prose-table:overflow-hidden
+                                    prose-thead:bg-zinc-50 prose-th:px-4 prose-th:py-2 prose-th:text-zinc-700
+                                    prose-td:px-4 prose-td:py-2 prose-td:border-t prose-td:border-zinc-50
+                                    prose-code:bg-zinc-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-zinc-800
+                                    prose-pre:bg-zinc-900 prose-pre:text-zinc-100 prose-pre:p-4 prose-pre:rounded-none
+                                ">
+                                    <ReactMarkdown>{analysisResult.markdownReport}</ReactMarkdown>
+                                </div>
+                            ) : (
+                                <div className="prose prose-sm prose-zinc max-w-none
+                                    prose-headings:text-zinc-900 prose-headings:font-bold
+                                    prose-h1:text-xl prose-h1:mb-6 prose-h1:pb-2 prose-h1:border-b prose-h1:border-zinc-100
+                                    prose-h2:text-sm prose-h2:uppercase prose-h2:tracking-wider prose-h2:text-zinc-500 prose-h2:mt-8 prose-h2:mb-4
+                                    prose-p:text-zinc-600 prose-p:leading-relaxed
+                                    prose-table:border prose-table:border-zinc-100 prose-table:rounded-lg prose-table:overflow-hidden
+                                    prose-thead:bg-zinc-50 prose-th:px-4 prose-th:py-2 prose-th:text-zinc-700
+                                    prose-td:px-4 prose-td:py-2 prose-td:border-t prose-td:border-zinc-50
+                                    prose-code:bg-zinc-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-zinc-800
+                                    prose-pre:bg-zinc-900 prose-pre:text-zinc-100 prose-pre:p-4 prose-pre:rounded-none
+                                ">
+                                    <ReactMarkdown>{placeholderMarkdown}</ReactMarkdown>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

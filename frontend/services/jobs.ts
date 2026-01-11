@@ -180,3 +180,34 @@ export const deleteJob = async (jobId: string): Promise<boolean> => {
         return false;
     }
 };
+
+export interface AnalysisResult {
+    id: string;
+    jobId: string;
+    markdownReport: string;
+    c1UiReport: string;
+    volume?: number;
+    surfaceArea?: number;
+    createdAt: string;
+}
+
+/**
+ * Get the analysis results for a job, including the Thesys C1 UI report.
+ */
+export const getJobAnalysisResults = async (jobId: string): Promise<AnalysisResult | null> => {
+    try {
+        const response = await fetch(`${API_URL}/jobs/${jobId}/results`, {
+            method: 'GET',
+            credentials: 'include',
+        });
+
+        if (!response.ok) {
+            return null;
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching job analysis results:", error);
+        return null;
+    }
+};
