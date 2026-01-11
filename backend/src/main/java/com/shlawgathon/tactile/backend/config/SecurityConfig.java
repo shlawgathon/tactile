@@ -34,6 +34,7 @@ public class SecurityConfig {
                         .requestMatchers("/internal/**").permitAll() // Agent module callbacks (auth handled by filter)
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/api/files/**").permitAll() // Public file downloads
+                        .requestMatchers("/ws/**").permitAll() // WebSocket endpoints (auth handled by handlers)
                         // All other requests require authentication
                         .anyRequest().authenticated())
                 .oauth2Login(oauth2 -> oauth2

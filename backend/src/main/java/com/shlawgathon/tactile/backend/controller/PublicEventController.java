@@ -41,27 +41,29 @@ public class PublicEventController {
     public ResponseEntity<List<AgentEventResponse>> getEvents(
             @PathVariable String jobId,
             @RequestParam(required = false) AgentEventType type,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @AuthenticationPrincipal(errorOnInvalidType = false) OAuth2User principal) {
 
-        // Get authenticated user ID
-        String userId = principal.getAttribute("sub");
-        if (userId == null) {
-            userId = principal.getName();
-        }
+        log.debug("Fetching events for job: {}", jobId);
 
-        log.debug("Fetching events for job: {} by user: {}", jobId, userId);
-
-        // Verify the job belongs to the authenticated user
+        // Verify the job exists
         Optional<Job> jobOpt = jobService.findById(jobId);
         if (jobOpt.isEmpty()) {
             log.warn("Job not found: {}", jobId);
             return ResponseEntity.notFound().build();
         }
 
-        Job job = jobOpt.get();
-        if (!job.getUserId().equals(userId)) {
-            log.warn("User {} attempted to access events for job {} owned by {}", userId, jobId, job.getUserId());
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        // If user is authenticated, verify ownership
+        if (principal != null) {
+            // GitHub OAuth provides 'id' attribute (numeric) as the user ID
+            Object idObj = principal.getAttribute("id");
+            String userId = idObj != null ? idObj.toString() : principal.getName();
+
+            Job job = jobOpt.get();
+            if (!job.getUserId().equals(userId)) {
+                log.warn("User {} (id: {}) attempted to access events for job {} owned by {}",
+                    principal.getName(), userId, jobId, job.getUserId());
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
         }
 
         // Fetch events
