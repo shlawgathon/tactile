@@ -6,6 +6,7 @@ import com.shlawgathon.tactile.backend.model.Job;
 import com.shlawgathon.tactile.backend.model.Suggestion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -27,6 +28,9 @@ public class PublicJobWebSocketHandler extends TextWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(PublicJobWebSocketHandler.class);
 
+    // Custom close status code for authentication failures (4001 = auth required)
+    public static final CloseStatus AUTH_REQUIRED = new CloseStatus(4001, "Authentication required");
+
     private final ObjectMapper objectMapper;
 
     // Map of jobId -> Map of sessionId -> session
@@ -39,12 +43,33 @@ public class PublicJobWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         String jobId = extractJobId(session);
+        
+        // Try to get principal from session first, then from handshake attributes
         Principal principal = session.getPrincipal();
+        String userName = null;
+        
+        if (principal != null) {
+            userName = principal.getName();
+        } else {
+            // Check handshake attributes for authentication set by interceptor
+            Object authObj = session.getAttributes().get(HttpSessionHandshakeInterceptor.PRINCIPAL_ATTR);
+            if (authObj instanceof Authentication auth) {
+                userName = auth.getName();
+                log.debug("Using principal from handshake attributes: {}", userName);
+            }
+        }
 
-        if (principal == null) {
+        if (userName == null) {
             log.warn("WebSocket connection rejected - no authenticated user for job: {}", jobId);
             try {
-                session.close(CloseStatus.POLICY_VIOLATION);
+                // Send an error message before closing so frontend knows it's an auth issue
+                WebSocketMessage errorMessage = WebSocketMessage.builder()
+                        .type("AUTH_ERROR")
+                        .jobId(jobId != null ? jobId : "")
+                        .data(Map.of("message", "Authentication required", "code", 4001))
+                        .build();
+                session.sendMessage(new TextMessage(objectMapper.writeValueAsString(errorMessage)));
+                session.close(AUTH_REQUIRED);
             } catch (IOException e) {
                 log.error("Failed to close unauthenticated WebSocket session", e);
             }
@@ -55,7 +80,7 @@ public class PublicJobWebSocketHandler extends TextWebSocketHandler {
             jobSessions.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>())
                     .put(session.getId(), session);
             log.info("Public WebSocket connected for job: {} session: {} user: {}",
-                    jobId, session.getId(), principal.getName());
+                    jobId, session.getId(), userName);
 
             // Send a welcome message
             try {

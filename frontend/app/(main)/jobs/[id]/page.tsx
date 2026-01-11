@@ -14,11 +14,14 @@ import {
     faHistory,
     faBolt,
     faGear,
-    faTrash
+    faTrash,
+    faRefresh,
+    faWifi,
+    faExclamationTriangle
 } from "@fortawesome/free-solid-svg-icons";
 import { Instrument_Sans } from "next/font/google";
 import { getJob, getFileUrl, Job, getJobEvents, AgentEvent, queryJobMemory, deleteJob } from '../../../../services/jobs';
-import { useJobEvents } from '../../../../hooks/useJobEvents';
+import { useJobEvents, ConnectionStatus, ConnectionError } from '../../../../hooks/useJobEvents';
 import StepViewer from '../../../../components/StepViewer';
 
 const instrument_sans = Instrument_Sans({
@@ -26,12 +29,65 @@ const instrument_sans = Instrument_Sans({
     subsets: ["latin"],
 });
 
+// Connection status badge component
+function ConnectionStatusBadge({ status, error }: { status: ConnectionStatus; error: ConnectionError | null }) {
+    const getStatusConfig = () => {
+        switch (status) {
+            case 'connected':
+                return {
+                    color: 'text-green-500',
+                    bgColor: 'bg-green-500',
+                    label: 'Live',
+                    animate: true
+                };
+            case 'polling':
+                return {
+                    color: 'text-blue-500',
+                    bgColor: 'bg-blue-500',
+                    label: 'Polling',
+                    animate: true
+                };
+            case 'connecting':
+                return {
+                    color: 'text-yellow-500',
+                    bgColor: 'bg-yellow-500',
+                    label: 'Connecting',
+                    animate: true
+                };
+            case 'error':
+                return {
+                    color: 'text-red-400',
+                    bgColor: 'bg-red-400',
+                    label: error?.type === 'auth' ? 'Auth Error' : 'Error',
+                    animate: false
+                };
+            default:
+                return {
+                    color: 'text-zinc-400',
+                    bgColor: 'bg-zinc-400',
+                    label: 'Unknown',
+                    animate: false
+                };
+        }
+    };
+
+    const config = getStatusConfig();
+
+    return (
+        <span className={`flex items-center gap-1 text-[10px] ${config.color}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${config.bgColor} ${config.animate ? 'animate-pulse' : ''}`}></span>
+            {config.label}
+        </span>
+    );
+}
+
 export default function JobPage() {
     const params = useParams();
     const router = useRouter();
     const id = params?.id as string;
     const [job, setJob] = useState<Job | null>(null);
     const [loading, setLoading] = useState(true);
+    const [initialEventsLoaded, setInitialEventsLoaded] = useState(false);
 
     // Chat state
     const [messages, setMessages] = useState<{ role: 'user' | 'ai', content: string }[]>([]);
@@ -49,16 +105,27 @@ export default function JobPage() {
     const settingsRef = useRef<HTMLDivElement>(null);
 
     // Use WebSocket for real-time event streaming
-    const { events, isConnected, connectionError } = useJobEvents(id, initialEvents);
+    // Only pass initialEvents once they've been loaded to avoid race condition
+    const { events, isConnected, connectionStatus, connectionError } = useJobEvents(
+        initialEventsLoaded ? id : null, 
+        initialEvents
+    );
 
     useEffect(() => {
         if (id) {
-            getJob(id).then(data => {
-                setJob(data);
+            // Load job and initial events in parallel, wait for both
+            Promise.all([
+                getJob(id),
+                getJobEvents(id)
+            ]).then(([jobData, eventsData]) => {
+                setJob(jobData);
+                setInitialEvents(eventsData);
+                setInitialEventsLoaded(true);
+                setLoading(false);
+            }).catch((error) => {
+                console.error('Failed to load job data:', error);
                 setLoading(false);
             });
-            // Initial fetch of events via REST API
-            getJobEvents(id).then(setInitialEvents);
         }
     }, [id]);
 
@@ -283,10 +350,7 @@ export default function JobPage() {
                             >
                                 Agent Feed
                                 {activeTab === 'feed' && (
-                                    <span className={`flex items-center gap-1 text-[10px] ${isConnected ? 'text-green-500' : connectionError ? 'text-red-400' : 'text-yellow-500'}`}>
-                                        <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : connectionError ? 'bg-red-400' : 'bg-yellow-500 animate-pulse'}`}></span>
-                                        {isConnected ? 'Live' : connectionError ? 'Error' : 'Connecting'}
-                                    </span>
+                                    <ConnectionStatusBadge status={connectionStatus} error={connectionError} />
                                 )}
                             </button>
                         </div>
@@ -388,9 +452,41 @@ export default function JobPage() {
 
                     {/* Agent Feed View */}
                     {activeTab === 'feed' && (
-                        <div className="flex-1 overflow-y-auto bg-zinc-50/30 font-mono">
+                        <div className="flex-1 overflow-y-auto bg-zinc-50/30 font-mono flex flex-col">
+                            {/* Connection error banner */}
+                            {connectionError && (
+                                <div className={`px-4 py-3 flex items-center gap-3 text-xs shrink-0 ${
+                                    connectionError.type === 'auth' 
+                                        ? 'bg-amber-50 border-b border-amber-100 text-amber-700' 
+                                        : 'bg-blue-50 border-b border-blue-100 text-blue-700'
+                                }`}>
+                                    <FontAwesomeIcon 
+                                        icon={connectionError.type === 'auth' ? faExclamationTriangle : faWifi} 
+                                        className="text-sm opacity-70" 
+                                    />
+                                    <span className="flex-1">{connectionError.message}</span>
+                                    {connectionError.type === 'auth' && (
+                                        <button 
+                                            onClick={() => window.location.reload()}
+                                            className="flex items-center gap-1.5 px-2 py-1 bg-amber-100 hover:bg-amber-200 rounded text-amber-800 transition-colors"
+                                        >
+                                            <FontAwesomeIcon icon={faRefresh} className="text-[10px]" />
+                                            Refresh
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                            
+                            {/* Polling indicator */}
+                            {connectionStatus === 'polling' && !connectionError && (
+                                <div className="px-4 py-2 flex items-center gap-2 text-[10px] bg-blue-50 border-b border-blue-100 text-blue-600 shrink-0">
+                                    <FontAwesomeIcon icon={faRefresh} className="animate-spin" />
+                                    <span>Using polling for updates (WebSocket unavailable)</span>
+                                </div>
+                            )}
+
                             {events.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-full text-zinc-400">
+                                <div className="flex-1 flex flex-col items-center justify-center text-zinc-400">
                                     <FontAwesomeIcon icon={faBolt} className="mb-2 text-xl opacity-20" />
                                     <span className="text-xs">No events yet</span>
                                 </div>
