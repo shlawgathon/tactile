@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import React, { useEffect, useState, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -12,12 +12,11 @@ import {
     faPlus,
     faHistory,
     faBolt,
-    faComment,
-    faWifi,
-    faExclamationTriangle
+    faGear,
+    faTrash
 } from "@fortawesome/free-solid-svg-icons";
 import { Instrument_Sans } from "next/font/google";
-import { getJob, getFileUrl, Job, getJobEvents, AgentEvent, queryJobMemory } from '../../../../services/jobs';
+import { getJob, getFileUrl, Job, getJobEvents, AgentEvent, queryJobMemory, deleteJob } from '../../../../services/jobs';
 import { useJobEvents } from '../../../../hooks/useJobEvents';
 import StepViewer from '../../../../components/StepViewer';
 
@@ -28,6 +27,7 @@ const instrument_sans = Instrument_Sans({
 
 export default function JobPage() {
     const params = useParams();
+    const router = useRouter();
     const id = params?.id as string;
     const [job, setJob] = useState<Job | null>(null);
     const [loading, setLoading] = useState(true);
@@ -40,6 +40,12 @@ export default function JobPage() {
     // View state
     const [activeTab, setActiveTab] = useState<'chat' | 'feed'>('chat');
     const [initialEvents, setInitialEvents] = useState<AgentEvent[]>([]);
+
+    // Settings state
+    const [showSettings, setShowSettings] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const settingsRef = useRef<HTMLDivElement>(null);
 
     // Use WebSocket for real-time event streaming
     const { events, isConnected, connectionError } = useJobEvents(id, initialEvents);
@@ -54,6 +60,35 @@ export default function JobPage() {
             getJobEvents(id).then(setInitialEvents);
         }
     }, [id]);
+
+    // Close settings dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
+                setShowSettings(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+
+
+    const handleDeleteClick = () => {
+        setShowDeleteConfirm(true);
+        setShowSettings(false);
+    };
+
+    const handleConfirmDelete = async () => {
+        setIsDeleting(true);
+        const success = await deleteJob(id);
+        if (success) {
+            router.push('/');
+        } else {
+            setIsDeleting(false);
+            setShowDeleteConfirm(false);
+        }
+    };
 
     const handleSendMessage = async () => {
         if (!inputValue.trim() || isLoading) return;
@@ -106,6 +141,42 @@ export default function JobPage() {
 
     return (
         <div className="flex flex-col w-full h-full overflow-hidden">
+            {/* Delete Confirmation Modal */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white border border-gray-200 shadow-xl p-6 max-w-sm w-full mx-4">
+                        <h3 className={`text-lg font-semibold text-zinc-900 mb-2 ${instrument_sans.className}`}>Delete Job?</h3>
+                        <p className="text-sm text-zinc-500 mb-6">This action cannot be undone. The job and all associated data will be permanently deleted.</p>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setShowDeleteConfirm(false)}
+                                disabled={isDeleting}
+                                className="px-4 py-2 text-sm font-medium text-zinc-600 bg-zinc-100 border border-zinc-200 hover:bg-zinc-200 transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConfirmDelete}
+                                disabled={isDeleting}
+                                className="px-4 py-2 text-sm font-medium text-white bg-red-500 border border-red-500 hover:bg-red-600 transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                            >
+                                {isDeleting ? (
+                                    <>
+                                        <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
+                                        Deleting...
+                                    </>
+                                ) : (
+                                    <>
+                                        <FontAwesomeIcon icon={faTrash} />
+                                        Delete
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Top Bar / Data Nav */}
             <div className={`h-13.5 border-b border-gray-200 bg-white flex items-center justify-between px-6 shrink-0 z-20 ${instrument_sans.className}`}>
                 <div className="flex items-center gap-4 overflow-hidden">
@@ -136,7 +207,7 @@ export default function JobPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                     <a
                         href={getFileUrl(job.fileStorageId)}
                         className="bg-zinc-100 text-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-200 transition-colors flex items-center gap-2 border border-zinc-200"
@@ -145,6 +216,29 @@ export default function JobPage() {
                         <FontAwesomeIcon icon={faDownload} />
                         Download
                     </a>
+
+                    {/* Settings Dropdown */}
+                    <div className="relative" ref={settingsRef}>
+                        <button
+                            onClick={() => setShowSettings(!showSettings)}
+                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 border border-zinc-200 transition-colors cursor-pointer"
+                            title="Settings"
+                        >
+                            <FontAwesomeIcon icon={faGear} className="text-sm" />
+                        </button>
+
+                        {showSettings && (
+                            <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 shadow-lg z-50 min-w-[160px]">
+                                <button
+                                    onClick={handleDeleteClick}
+                                    className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors cursor-pointer"
+                                >
+                                    <FontAwesomeIcon icon={faTrash} className="text-xs" />
+                                    Delete Job
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 

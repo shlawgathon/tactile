@@ -195,6 +195,24 @@ public class JobService {
         }).orElseThrow(() -> new RuntimeException("Job not found: " + jobId));
     }
 
+    /**
+     * Delete a job permanently.
+     */
+    public void deleteJob(String jobId) {
+        jobRepository.findById(jobId).ifPresent(job -> {
+            // Cancel the job first if it's running
+            if (job.getStatus() == JobStatus.QUEUED || job.getStatus() == JobStatus.PARSING || 
+                job.getStatus() == JobStatus.ANALYZING) {
+                try {
+                    agentCommunicationService.cancelJob(jobId);
+                } catch (Exception e) {
+                    // Ignore cancellation errors during deletion
+                }
+            }
+            jobRepository.deleteById(jobId);
+        });
+    }
+
     public void delete(String id) {
         jobRepository.deleteById(id);
     }
