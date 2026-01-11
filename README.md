@@ -87,8 +87,8 @@ flowchart LR
 
 ## How to Use
 
-1. Export your CAD design as a `.stp` file in Fusion 360.
-2. Upload the `.stp` file to the platform.
+1. Export your CAD design as a `.step` file in Fusion 360.
+2. Upload the `.step` file to the platform.
 3. Let the AI agents analyze and critique your design for DFM and performance.
 4. Update your design based on the AI's suggestions.
 5. Repeat steps 2-4 until your design is optimized.
