@@ -2,11 +2,18 @@ import { DM_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from 'react-hot-toast';
 import { WagmiProvider } from '../providers/WagmiProvider';
+import type { Metadata } from 'next';
 
 const dm_mono = DM_Mono({
   weight: ["300", "400", "500"],
   subsets: ["latin"],
 });
+
+export const metadata: Metadata = {
+  icons: {
+    icon: '/favicon.png',
+  },
+};
 
 export default function RootLayout({
   children,

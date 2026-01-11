@@ -27,6 +27,7 @@
     "react-dom": "19.2.3",
     "react-hot-toast": "^2.6.0",
     "react-markdown": "^10.1.0",
+    "react-resizable-panels": "^4.3.3",
     "three": "^0.182.0",
     "viem": "^2.44.1",
     "wagmi": "^3.3.1"
