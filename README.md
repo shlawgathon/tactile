@@ -102,3 +102,5 @@ flowchart LR
 - AI: FastAPI + PARSE + Fireworks AI + Voyage Embeddings + Thesys C1
 - Payments: Coinbase CDP x402
 - Authentication: GitHub OAuth
+
+Powered by [CadQuery](https://cadquery.readthedocs.io/en/latest/apireference.html#id1) - Python library for controlling parametric 3D CAD models
