@@ -157,7 +157,7 @@ export default function StepViewer({ url }: StepViewerProps) {
     }, [url]);
 
     return (
-        <div className="w-full h-full relative bg-zinc-900 overflow-hidden min-h-[500px]">
+        <div className="w-full h-full relative bg-zinc-900 overflow-hidden">
             {loading && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-white z-10 bg-zinc-900/90 gap-4 backdrop-blur-sm">
                     {/* Custom CSS loader or just a nice animated icon */}
