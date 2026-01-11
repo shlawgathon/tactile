@@ -1,15 +1,17 @@
 # tactile3d
+
 ![tactile3d.png](tactile3d.png)
 The ultimate CAD analysis and update platform.
 
 ## System Architecture (Mermaid)
+
 ```mermaid
 flowchart LR
   %% Client
   subgraph Client["Client: Nextjs + Wallet"]
-    U[CAD Engineer]
-    FE[Nextjs Web App]
-    W[Wallet (wagmi + viem)]
+    U["CAD Engineer"]
+    FE["Nextjs Web App"]
+    W["Wallet (wagmi + viem)"]
     U --> FE
     W --> FE
   end
@@ -26,8 +28,8 @@ flowchart LR
 
   %% Data layer
   subgraph Data["MongoDB"]
-    DB[(Collections: users, jobs, results, memories)]
-    GRID[(GridFS: CAD files + artifacts)]
+    DB[("Collections: users, jobs, results, memories")]
+    GRID[("GridFS: CAD files + artifacts")]
   end
 
   %% Agent Module
@@ -45,7 +47,7 @@ flowchart LR
     FW[Fireworks AI]
     VY[Voyage Embeddings]
     TH[Thesys C1]
-    CDP[Coinbase CDP x402]
+    CDP["Coinbase CDP x402"]
   end
 
   %% Client <-> API
