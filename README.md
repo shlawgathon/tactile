@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="frontend/icon.png" alt="tactile3d logo" width="200" />
+</p>
+
+
 # tactile3d
 
 ![tactile3d.png](tactile3d.png)
