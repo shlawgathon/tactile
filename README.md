@@ -97,7 +97,7 @@ flowchart LR
 
 ## Tech Stack
 
-- Frontend: Nextjs (Vercel) + TailwindCSS + Shadcn UI
+- Frontend: Nextjs (Vercel) + TailwindCSS
 - Backend: Spring Boot + MongoDB + GridFS + WebSocket
 - AI: FastAPI + PARSE + Fireworks AI + Voyage Embeddings + Thesys C1
 - Payments: Coinbase CDP x402
