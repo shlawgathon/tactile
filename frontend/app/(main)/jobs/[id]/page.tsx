@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -323,9 +324,15 @@ export default function JobPage() {
                                             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
                                                 {msg.role === 'user' ? 'You' : 'Tactile AI'}
                                             </span>
-                                            <div className="text-sm text-zinc-800 leading-relaxed whitespace-pre-wrap">
-                                                {msg.content}
-                                            </div>
+                                            {msg.role === 'ai' ? (
+                                                <div className="text-sm text-zinc-800 leading-relaxed prose prose-sm prose-zinc max-w-none prose-p:my-1 prose-strong:text-zinc-900 prose-code:text-xs prose-code:bg-zinc-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-zinc-100 prose-pre:text-xs prose-ul:my-1 prose-li:my-0">
+                                                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                                </div>
+                                            ) : (
+                                                <div className="text-sm text-zinc-800 leading-relaxed whitespace-pre-wrap">
+                                                    {msg.content}
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                     {isLoading && (

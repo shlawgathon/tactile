@@ -2,6 +2,7 @@
 FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
 # Set working directory
+COPY /image/agent /app
 WORKDIR /app
 
 # Enable bytecode compilation for faster startup
@@ -28,9 +29,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --no-dev
-
-# Copy application code
-COPY . .
 
 # Sync the project (install the project itself)
 RUN --mount=type=cache,target=/root/.cache/uv \

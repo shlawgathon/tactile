@@ -363,18 +363,28 @@ CNC MACHINING RULES:
                 timeout_seconds=30.0
             )
             
-            # AUTO-STORE MEMORY: Automatically store successful CadQuery results
+            # AUTO-STORE MEMORY: Automatically store successful CadQuery results with rich detail
             if result.get("success") and self.backend_client:
                 try:
                     result_data = result.get("result", result.get("output", ""))
-                    memory_content = f"{description}: {result_data}"
+                    # Build a detailed, descriptive memory entry
+                    memory_content = f"""**Analysis: {description}**
+
+**Result:** {result_data}
+
+**Code executed:**
+```python
+{code[:500]}{'...' if len(code) > 500 else ''}
+```
+
+**Manufacturing Process:** {self.manufacturing_process}"""
                     await self.backend_client.store_memory(
                         job_id=self.job_id,
-                        key=f"cadquery_{description[:30].replace(' ', '_').lower()}",
+                        key=f"analysis_{description[:30].replace(' ', '_').lower()}",
                         value=memory_content,
                         category="measurement"
                     )
-                    logger.info(f"Auto-stored memory for CadQuery: {description[:50]}")
+                    logger.info(f"Auto-stored detailed memory for CadQuery: {description[:50]}")
                 except Exception as e:
                     logger.warning(f"Failed to auto-store CadQuery memory: {e}")
             
@@ -409,17 +419,33 @@ CNC MACHINING RULES:
                 auto_fix_code=arguments.get("auto_fix_code")
             )
             
-            # AUTO-STORE MEMORY: Store suggestions as issues in memory
+            # AUTO-STORE MEMORY: Store suggestions as detailed issue entries
             if result.get("success") and self.backend_client:
                 try:
-                    priority_label = {1: "HIGH", 2: "MEDIUM", 3: "LOW"}.get(priority, "MEDIUM")
+                    priority_label = {1: "🔴 HIGH", 2: "🟡 MEDIUM", 3: "🟢 LOW"}.get(priority, "🟡 MEDIUM")
+                    issue_id = arguments.get('issue_id', 'general')
+                    auto_fix = arguments.get('auto_fix_code')
+                    
+                    memory_content = f"""**DFM Issue Found - {priority_label} Priority**
+
+**Issue ID:** {issue_id}
+
+**Problem:** {suggestion_text}
+
+**Manufacturing Process:** {self.manufacturing_process}
+
+**Auto-fix available:** {'Yes' if auto_fix else 'No'}"""
+                    
+                    if auto_fix:
+                        memory_content += f"\n\n**Suggested fix code:**\n```python\n{auto_fix[:300]}{'...' if len(str(auto_fix)) > 300 else ''}\n```"
+                    
                     await self.backend_client.store_memory(
                         job_id=self.job_id,
-                        key=f"suggestion_{arguments.get('issue_id', 'general')}",
-                        value=f"[{priority_label}] {suggestion_text}",
+                        key=f"issue_{issue_id}",
+                        value=memory_content,
                         category="issue"
                     )
-                    logger.info(f"Auto-stored memory for suggestion: {suggestion_text[:50]}")
+                    logger.info(f"Auto-stored detailed issue memory: {suggestion_text[:50]}")
                 except Exception as e:
                     logger.warning(f"Failed to auto-store suggestion memory: {e}")
             
@@ -444,15 +470,39 @@ CNC MACHINING RULES:
                     svg_content = read_svg_content(result["path"])
                     result["svg_content"] = svg_content
                     
-                    # AUTO-STORE MEMORY: Store screenshot observation
+                    # AUTO-STORE MEMORY: Store detailed screenshot observation
                     if self.backend_client:
+                        view_descriptions = {
+                            "iso": "Isometric view showing 3D perspective",
+                            "iso_back": "Back isometric view",
+                            "top": "Top-down view (Z-axis)",
+                            "bottom": "Bottom view (underside)",
+                            "front": "Front elevation",
+                            "back": "Rear elevation",
+                            "left": "Left side view",
+                            "right": "Right side view"
+                        }
+                        view_desc = view_descriptions.get(view, f"{view} angle")
+                        
+                        memory_content = f"""**Visual Inspection: {view_desc}**
+
+**View angle:** {view}
+**Purpose:** {description}
+**Manufacturing process:** {self.manufacturing_process}
+
+**What to look for in this view:**
+- Overhangs and bridges (for 3D printing)
+- Draft angles (for injection molding)
+- Undercuts and negative features
+- Surface details and geometry complexity"""
+                        
                         await self.backend_client.store_memory(
                             job_id=self.job_id,
-                            key=f"screenshot_{view}",
-                            value=f"Captured {view} view: {description}",
+                            key=f"visual_{view}",
+                            value=memory_content,
                             category="observation"
                         )
-                        logger.info(f"Auto-stored memory for screenshot: {view}")
+                        logger.info(f"Auto-stored detailed visual memory: {view}")
                 except Exception as e:
                     result["error_reading_content"] = str(e)
                     

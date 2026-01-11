@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tactile-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tactile-frontend
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: tactile-frontend
+    spec:
+      containers:
+        - image: tactile-frontend:latest
+          name: tactile-frontend
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: "256Mi"
+            limits:
+              memory: "512Mi"
+          ports:
+            - containerPort: 3000
+              protocol: TCP
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: "https://api.tactile3d.dev/api"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tactile-frontend-svc
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 3000
+      targetPort: 3000
+  selector:
+    app: tactile-frontend
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tactile-frontend-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      real_ip_header CF-Connecting-IP;
+      proxy_set_header X-Real-IP $http_cf_connecting_ip;
+    cert-manager.io/cluster-issuer: "tactile3d-cloudflare-issuer"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - tactile3d.dev
+      secretName: managed-tactile3d-dev-tls
+  rules:
+    - host: tactile3d.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tactile-frontend-svc
+                port:
+                  number: 3000
