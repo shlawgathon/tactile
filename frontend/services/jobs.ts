@@ -163,3 +163,20 @@ export const queryJobMemory = async (jobId: string, query: string): Promise<Quer
         return null;
     }
 };
+
+/**
+ * Delete a job by ID.
+ */
+export const deleteJob = async (jobId: string): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}/jobs/${jobId}`, {
+            method: 'DELETE',
+            credentials: 'include',
+        });
+
+        return response.ok;
+    } catch (error) {
+        console.error("Error deleting job:", error);
+        return false;
+    }
+};

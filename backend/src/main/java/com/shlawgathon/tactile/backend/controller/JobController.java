@@ -77,6 +77,23 @@ public class JobController {
     }
 
     @DeleteMapping("/{id}")
+    @Operation(summary = "Delete job", description = "Permanently delete a job and all associated data")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Job deleted"),
+            @ApiResponse(responseCode = "404", description = "Job not found")
+    })
+    public ResponseEntity<Void> deleteJob(
+            @Parameter(description = "Job ID") @PathVariable String id) {
+
+        try {
+            jobService.deleteJob(id);
+            return ResponseEntity.noContent().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PostMapping("/{id}/cancel")
     @Operation(summary = "Cancel job", description = "Cancel a running job")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Job cancelled"),
