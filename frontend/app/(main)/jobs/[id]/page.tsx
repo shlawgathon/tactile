@@ -21,7 +21,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { Instrument_Sans } from "next/font/google";
 import { getJob, getFileUrl, Job, getJobEvents, AgentEvent, queryJobMemory, deleteJob } from '../../../../services/jobs';
-import { useJobEvents } from '../../../../hooks/useJobEvents';
+import { useJobEvents, ConnectionStatus, ConnectionError } from '../../../../hooks/useJobEvents';
 import StepViewer from '../../../../components/StepViewer';
 
 const instrument_sans = Instrument_Sans({
@@ -81,6 +81,7 @@ export default function JobPage() {
     const id = params?.id as string;
     const [job, setJob] = useState<Job | null>(null);
     const [loading, setLoading] = useState(true);
+    const [initialEventsLoaded, setInitialEventsLoaded] = useState(false);
 
     // Chat state
     const [messages, setMessages] = useState<{ role: 'user' | 'ai', content: string }[]>([]);
@@ -98,16 +99,27 @@ export default function JobPage() {
     const settingsRef = useRef<HTMLDivElement>(null);
 
     // Use WebSocket for real-time event streaming
-    const { events, isConnected, connectionError } = useJobEvents(id, initialEvents);
+    // Only pass initialEvents once they've been loaded to avoid race condition
+    const { events, isConnected, connectionStatus, connectionError } = useJobEvents(
+        initialEventsLoaded ? id : null,
+        initialEvents
+    );
 
     useEffect(() => {
         if (id) {
-            getJob(id).then(data => {
-                setJob(data);
+            // Load job and initial events in parallel, wait for both
+            Promise.all([
+                getJob(id),
+                getJobEvents(id)
+            ]).then(([jobData, eventsData]) => {
+                setJob(jobData);
+                setInitialEvents(eventsData);
+                setInitialEventsLoaded(true);
+                setLoading(false);
+            }).catch((error) => {
+                console.error('Failed to load job data:', error);
                 setLoading(false);
             });
-            // Initial fetch of events via REST API
-            getJobEvents(id).then(setInitialEvents);
         }
     }, [id]);
 

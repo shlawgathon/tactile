@@ -195,6 +195,14 @@ public class JobWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
+     * Broadcast a message from Redis Pub/Sub to local sessions.
+     * Called by JobEventSubscriber when receiving events from other pods.
+     */
+    public void broadcastFromPubSub(String jobId, WebSocketMessage message) {
+        broadcastMessage(jobId, message);
+    }
+
+    /**
      * Broadcast a message to all sessions for a job.
      */
     private void broadcastMessage(String jobId, WebSocketMessage message) {

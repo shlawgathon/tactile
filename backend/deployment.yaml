@@ -47,9 +47,20 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
     nginx.ingress.kubernetes.io/websocket-services: "tactile-platform-svc"
+    # WebSocket upgrade support
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$http_upgrade"
+    # Large file upload support (512MB to match Spring config)
+    nginx.ingress.kubernetes.io/proxy-body-size: "512m"
+    # Timeout configuration for large uploads and long-running connections
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
     nginx.ingress.kubernetes.io/configuration-snippet: |
       real_ip_header CF-Connecting-IP;
       proxy_set_header X-Real-IP $http_cf_connecting_ip;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
     cert-manager.io/cluster-issuer: "tactile3d-cloudflare-issuer"
 spec:
   ingressClassName: nginx
