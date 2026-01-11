@@ -1,7 +1,7 @@
 <p align="center">
   <img src="frontend/icon.png" alt="tactile3d logo" width="200" /><br />
   <br />
-  <i>The ultimate CAD analysis and update platform.</i>
+  <i>The ultimate multi-agent orchestrated CAD analysis and update platform.</i>
 </p>
 
 # tactile3d
