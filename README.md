@@ -1,7 +1,12 @@
+<p align="center">
+  <img src="frontend/icon.png" alt="tactile3d logo" width="200" /><br />
+  <br />
+  <i>The ultimate multi-agent orchestrated CAD analysis and update platform.</i>
+</p>
+
 # tactile3d
 
 ![tactile3d.png](tactile3d.png)
-The ultimate CAD analysis and update platform.
 
 ## System Architecture (Mermaid)
 
@@ -92,7 +97,7 @@ flowchart LR
 
 ## Tech Stack
 
-- Frontend: Nextjs (Vercel) + TailwindCSS + Shadcn UI
+- Frontend: Nextjs (Vercel) + TailwindCSS
 - Backend: Spring Boot + MongoDB + GridFS + WebSocket
 - AI: FastAPI + PARSE + Fireworks AI + Voyage Embeddings + Thesys C1
 - Payments: Coinbase CDP x402
