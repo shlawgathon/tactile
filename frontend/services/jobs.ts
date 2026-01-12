@@ -38,7 +38,7 @@ export const uploadFile = async (file: File): Promise<string | null> => {
     }
 };
 
-export const createJob = async (fileId: string, filename: string): Promise<Job | null> => {
+export const createJob = async (fileId: string, filename: string, x402Budget?: number): Promise<Job | null> => {
     try {
         const response = await fetch(`${API_URL}/jobs`, {
             method: 'POST',
@@ -50,7 +50,8 @@ export const createJob = async (fileId: string, filename: string): Promise<Job |
                 originalFilename: filename,
                 // Defaulting to FDM_3D_PRINTING for now as per MVP plan
                 manufacturingProcess: "FDM_3D_PRINTING",
-                material: "PLA"
+                material: "PLA",
+                x402Budget: x402Budget ?? 1.0,
             }),
             credentials: 'include',
         });

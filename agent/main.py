@@ -39,6 +39,7 @@ class StartJobRequest(BaseModel):
     material: Optional[str] = None
     callbackUrl: Optional[str] = None
     resumeFromCheckpoint: Optional[dict] = None
+    x402Budget: Optional[float] = 1.0  # Budget in USD for x402 payments
 
 
 class ResumeCheckpoint(BaseModel):

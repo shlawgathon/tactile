@@ -34,6 +34,9 @@ public class CreateJobRequest {
 
     @Schema(description = "Original filename", example = "bracket.step")
     private String originalFilename;
+
+    @Schema(description = "x402 agent budget in USD", example = "1.00")
+    private Double x402Budget;
 }
 
 /**

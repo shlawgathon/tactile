@@ -20,6 +20,11 @@ export default function Dashboard() {
     const [jobs, setJobs] = useState<Job[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    
+    // Budget modal state
+    const [showBudgetModal, setShowBudgetModal] = useState(false);
+    const [pendingFile, setPendingFile] = useState<{fileId: string, filename: string} | null>(null);
+    const [budget, setBudget] = useState('1.00');
 
     const totalPages = Math.ceil(jobs.length / ITEMS_PER_PAGE);
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -43,14 +48,36 @@ export default function Dashboard() {
             const fileId = await uploadFile(file);
 
             if (fileId) {
-                await createJob(fileId, file.name);
-                await fetchJobs(); // Refresh list
+                // Show budget modal before creating job
+                setPendingFile({ fileId, filename: file.name });
+                setShowBudgetModal(true);
             }
         } catch (error) {
             console.error("Upload process failed", error);
         } finally {
             setUploading(false);
         }
+    };
+
+    const handleConfirmBudget = async () => {
+        if (!pendingFile) return;
+        
+        setShowBudgetModal(false);
+        setUploading(true);
+        try {
+            await createJob(pendingFile.fileId, pendingFile.filename, parseFloat(budget));
+            await fetchJobs();
+        } catch (error) {
+            console.error("Create job failed", error);
+        } finally {
+            setUploading(false);
+            setPendingFile(null);
+        }
+    };
+
+    const handleCancelBudget = () => {
+        setShowBudgetModal(false);
+        setPendingFile(null);
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -78,6 +105,49 @@ export default function Dashboard() {
     };
 
     return (
+        <>
+        {/* Budget Modal */}
+        {showBudgetModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+                <div className="bg-white border border-zinc-200 shadow-xl w-full max-w-md mx-4">
+                    <div className="px-6 py-4 border-b border-zinc-100">
+                        <h3 className={`${instrument_sans.className} text-lg font-semibold`}>Set Agent Budget</h3>
+                        <p className="text-zinc-500 text-sm mt-1">Maximum USDC the agent can spend on parts search</p>
+                    </div>
+                    <div className="px-6 py-6">
+                        <label className="block text-sm font-medium text-zinc-700 mb-2">Budget (USDC)</label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">$</span>
+                            <input
+                                type="number"
+                                step="0.10"
+                                min="0"
+                                value={budget}
+                                onChange={(e) => setBudget(e.target.value)}
+                                className="w-full pl-8 pr-4 py-3 border border-zinc-200 text-lg font-mono focus:outline-none focus:border-primary"
+                                placeholder="1.00"
+                            />
+                        </div>
+                        <p className="text-xs text-zinc-400 mt-2">Base Sepolia testnet - no real funds used</p>
+                    </div>
+                    <div className="px-6 py-4 border-t border-zinc-100 flex gap-3 justify-end">
+                        <button
+                            onClick={handleCancelBudget}
+                            className="px-4 py-2 border border-zinc-200 text-zinc-600 hover:bg-zinc-50 transition-colors cursor-pointer"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleConfirmBudget}
+                            className="px-4 py-2 bg-primary border border-primary text-white hover:bg-primary/90 transition-colors cursor-pointer"
+                        >
+                            Start Analysis
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        
         <div className="w-full min-h-screen flex flex-col gap-8 max-w-4xl mx-auto">
             <div className="flex flex-col tracking-">
                 <h1 className={`${instrument_sans.className} text-2xl font-semibold`}>Get Started</h1>
@@ -206,5 +276,6 @@ export default function Dashboard() {
                 )}
             </div>
         </div>
+        </>
     );
 }
