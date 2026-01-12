@@ -44,6 +44,8 @@ flowchart LR
     ANALYZE[ANALYZE]
     SUGGEST[SUGGEST]
     VALIDATE[VALIDATE]
+    PARTS["Parts Search"]
+    X402C["x402 Client"]
   end
 
   %% External services
@@ -83,6 +85,8 @@ flowchart LR
   AAPI -->|DFM LLM assist| FW
   REST -->|UI spec from report| TH
   REST -->|verify/settle payments| CDP
+  PARTS -->|search + pay| X402C
+  X402C -->|x402 payments| CDP
 ```
 
 ## How to Use
@@ -109,6 +113,7 @@ The CAD agent supports autonomous payments for external x402-protected services 
 
 **Features:**
 
+- **Budget Control** - Set spending limit before upload via popup
 - **Parts Search** - Search for screws, bearings, motors during chat
 - **Automatic Payment** - Agent signs x402 payments for premium CAD data
 
