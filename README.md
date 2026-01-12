@@ -103,4 +103,29 @@ flowchart LR
 - Payments: Coinbase CDP x402
 - Authentication: GitHub OAuth
 
+## x402 Agent Payments
+
+The CAD agent supports autonomous payments for external x402-protected services using the Coinbase x402 protocol on **Base Sepolia testnet** (no real funds required).
+
+**Features:**
+
+- **Parts Search** - Search for screws, bearings, motors during chat
+- **Automatic Payment** - Agent signs x402 payments for premium CAD data
+
+**Setup:**
+
+```bash
+cd agent
+pip install -e .
+python -m tools.x402_client  # Generate wallet
+# Fund at: https://faucet.cdp.coinbase.com/
+```
+
+Add to `.env`:
+
+```
+X402_AGENT_PRIVATE_KEY=0x...
+X402_NETWORK=base-sepolia
+```
+
 Powered by [CadQuery](https://cadquery.readthedocs.io/en/latest/apireference.html#id1) - Python library for controlling parametric 3D CAD models
