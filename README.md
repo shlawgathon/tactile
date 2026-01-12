@@ -29,6 +29,7 @@ flowchart LR
     FILES[File Service]
     MEM[Memory Service]
     EVENTS[Agent Event Service]
+    PARTSAPI["/api/parts (x402)"]
   end
 
   %% Data layer
@@ -85,8 +86,9 @@ flowchart LR
   AAPI -->|DFM LLM assist| FW
   REST -->|UI spec from report| TH
   REST -->|verify/settle payments| CDP
-  PARTS -->|search + pay| X402C
-  X402C -->|x402 payments| CDP
+  PARTS -->|GET /api/parts/search| PARTSAPI
+  X402C -->|GET /cad + X-PAYMENT| PARTSAPI
+  PARTSAPI -->|verify/settle| CDP
 ```
 
 ## How to Use
@@ -116,6 +118,35 @@ The CAD agent supports autonomous payments for external x402-protected services 
 - **Budget Control** - Set spending limit before upload via popup
 - **Parts Search** - Search for screws, bearings, motors during chat
 - **Automatic Payment** - Agent signs x402 payments for premium CAD data
+
+### Parts API Endpoints
+
+| Endpoint                          | Auth     | Description                     |
+| --------------------------------- | -------- | ------------------------------- |
+| `GET /api/parts/search?query=...` | None     | Search parts catalog (free)     |
+| `GET /api/parts/{partNumber}`     | None     | Get part details (free)         |
+| `GET /api/parts/{partNumber}/cad` | **x402** | Download CAD (requires payment) |
+
+### Available MOCK Parts Catalog
+
+| Part Number     | Name                            | Price (test USDC) |
+| --------------- | ------------------------------- | ----------------- |
+| `MC-M3X10-SHCS` | M3 x 10mm Socket Head Cap Screw | $0.01             |
+| `MC-MR63ZZ`     | MR63ZZ Miniature Ball Bearing   | $0.02             |
+| `NEMA17-42`     | NEMA 17 Stepper Motor           | $0.05             |
+| `LM8UU`         | LM8UU Linear Ball Bearing       | $0.01             |
+
+### x402 Payment Flow
+
+```
+Agent → GET /api/parts/MC-M3X10-SHCS/cad
+     ← 402 Payment Required (price: $0.01 USDC)
+Agent → Signs payment with wallet (Base Sepolia)
+Agent → GET /cad + X-PAYMENT header
+     → Backend verifies via CDP Facilitator API
+     → Backend settles payment
+     ← 200 OK + CAD data + transaction hash
+```
 
 **Setup:**
 

@@ -82,27 +82,20 @@ class PartsSearchTool:
     3. Download CAD models (paid via x402 if required)
     """
 
-    # Known x402-enabled parts APIs (examples - add real ones as they become available)
-    DEFAULT_PARTS_APIS = [
-        # These would be real x402-enabled parts APIs
-        # "https://api.partsbox.io/v1",
-        # "https://api.mcmaster.com/x402",
-    ]
-
     def __init__(
         self,
         private_key: Optional[str] = None,
-        parts_api_urls: Optional[List[str]] = None,
+        backend_url: Optional[str] = None,
     ):
         """
         Initialize the parts search tool.
 
         Args:
             private_key: EVM private key for x402 payments.
-            parts_api_urls: List of parts API URLs to search.
+            backend_url: Backend API URL for parts endpoint.
         """
         self.private_key = private_key or os.getenv("X402_AGENT_PRIVATE_KEY")
-        self.parts_api_urls = parts_api_urls or self.DEFAULT_PARTS_APIS
+        self.backend_url = backend_url or os.getenv("BACKEND_URL", "http://localhost:8080")
         self._x402_client: Optional[X402DemandClient] = None
 
     async def _get_x402_client(self) -> X402DemandClient:
@@ -137,19 +130,40 @@ class PartsSearchTool:
         """
         results = []
 
-        # For now, use a mock search since we don't have live x402 parts APIs yet
-        # In production, this would query real parts catalogs
+        # Try to call backend API first
+        try:
+            async with httpx.AsyncClient() as client:
+                params = {"query": query}
+                if category:
+                    params["category"] = category
+                
+                response = await client.get(
+                    f"{self.backend_url}/api/parts/search",
+                    params=params,
+                    timeout=10.0
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    for part in data.get("results", []):
+                        results.append(PartsSearchResult(
+                            part_number=part.get("partNumber", ""),
+                            name=part.get("name", ""),
+                            manufacturer=part.get("manufacturer", ""),
+                            description=part.get("name", ""),
+                            category=part.get("category", ""),
+                            price=part.get("priceUsd"),
+                            cad_available=True,
+                            cad_url=f"{self.backend_url}{part.get('cadUrl', '')}",
+                        ))
+                    logger.info(f"Backend search returned {len(results)} results")
+                    return results[:max_results]
+        except Exception as e:
+            logger.warning(f"Backend parts search failed, using mock: {e}")
+
+        # Fall back to mock search if backend unavailable
         mock_results = await self._mock_parts_search(query, category, manufacturer)
         results.extend(mock_results[:max_results])
-
-        # Future: Search real x402-enabled parts APIs
-        # for api_url in self.parts_api_urls:
-        #     try:
-        #         api_results = await self._search_api(api_url, query, category, manufacturer)
-        #         results.extend(api_results)
-        #     except Exception as e:
-        #         logger.warning(f"Failed to search {api_url}: {e}")
-
         return results[:max_results]
 
     async def get_part_details(
@@ -175,36 +189,50 @@ class PartsSearchTool:
     async def download_cad(
         self,
         part_number: str,
-        format: str = "step",
+        cad_format: str = "step",
         cad_url: Optional[str] = None,
-    ) -> Optional[bytes]:
+    ) -> Optional[dict]:
         """
         Download CAD model for a part via x402 payment.
 
         Args:
             part_number: The part number
-            format: CAD format (step, iges, stl)
+            cad_format: CAD format (step, iges, stl)
             cad_url: Optional direct URL to CAD file
 
         Returns:
-            CAD file bytes, or None if not available
+            Dict with CAD data and transaction info, or None if failed
         """
-        if cad_url:
-            # Use x402 client to download (handles payment automatically)
-            try:
-                async with await self._get_x402_client() as client:
-                    response = await client.get(cad_url)
-                    if response.status_code == 200:
-                        return response.content
-                    else:
-                        logger.error(f"Failed to download CAD: {response.status_code}")
-                        return None
-            except Exception as e:
-                logger.error(f"x402 CAD download failed: {e}")
-                return None
-
-        # If no URL provided, we'd need to look up the part first
-        return None
+        # Build CAD URL from backend if not provided
+        if not cad_url:
+            cad_url = f"{self.backend_url}/api/parts/{part_number}/cad"
+        
+        # Use x402 client to download (handles payment automatically)
+        try:
+            async with await self._get_x402_client() as client:
+                response = await client.get(cad_url)
+                
+                if response.status_code == 200:
+                    # Payment succeeded, we have CAD data
+                    data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {"cadData": response.text}
+                    tx_hash = response.headers.get("x-payment-response", "")
+                    
+                    logger.info(f"CAD download succeeded for {part_number}, tx: {tx_hash}")
+                    return {
+                        "success": True,
+                        "part_number": part_number,
+                        "transaction_hash": tx_hash,
+                        "cad_data": data.get("cadData", data),
+                    }
+                elif response.status_code == 402:
+                    logger.warning(f"Payment required for CAD: {part_number}")
+                    return {"success": False, "error": "Payment required"}
+                else:
+                    logger.error(f"Failed to download CAD: {response.status_code}")
+                    return {"success": False, "error": f"HTTP {response.status_code}"}
+        except Exception as e:
+            logger.error(f"x402 CAD download failed: {e}")
+            return {"success": False, "error": str(e)}
 
     async def _mock_parts_search(
         self,
@@ -418,20 +446,21 @@ async def handle_parts_search_tool_call(
         }
 
     elif tool_name == "download_part_cad":
-        cad_data = await tool.download_cad(
+        result = await tool.download_cad(
             part_number=arguments.get("part_number", ""),
-            format=arguments.get("format", "step"),
+            cad_format=arguments.get("format", "step"),
         )
-        if cad_data:
+        if result and result.get("success"):
             return {
                 "success": True,
                 "message": f"CAD downloaded for {arguments.get('part_number')}",
-                "size_bytes": len(cad_data),
+                "transaction_hash": result.get("transaction_hash", ""),
+                "cad_data": result.get("cad_data"),
             }
         else:
             return {
                 "success": False,
-                "message": "CAD not available or payment failed",
+                "message": result.get("error", "CAD not available or payment failed") if result else "CAD not available",
             }
 
     return {"success": False, "error": f"Unknown tool: {tool_name}"}
