@@ -21,6 +21,22 @@ except ImportError:
     BACKEND_CLIENT_AVAILABLE = False
     BackendClient = None
 
+# Import parts search tool with x402 payment integration
+try:
+    from tools.parts_search import (
+        PartsSearchTool,
+        PARTS_SEARCH_TOOL_DEFINITION,
+        DOWNLOAD_CAD_TOOL_DEFINITION,
+        handle_parts_search_tool_call,
+    )
+    PARTS_SEARCH_AVAILABLE = True
+except ImportError:
+    PARTS_SEARCH_AVAILABLE = False
+    PartsSearchTool = None
+    PARTS_SEARCH_TOOL_DEFINITION = None
+    DOWNLOAD_CAD_TOOL_DEFINITION = None
+    handle_parts_search_tool_call = None
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -190,6 +206,12 @@ TOOL_DEFINITIONS = [
         }
     }
 ]
+
+# Add parts search tools if available (x402 demand-side payments)
+if PARTS_SEARCH_AVAILABLE and PARTS_SEARCH_TOOL_DEFINITION:
+    TOOL_DEFINITIONS.append(PARTS_SEARCH_TOOL_DEFINITION)
+if PARTS_SEARCH_AVAILABLE and DOWNLOAD_CAD_TOOL_DEFINITION:
+    TOOL_DEFINITIONS.append(DOWNLOAD_CAD_TOOL_DEFINITION)
 
 
 class CADAgent:
@@ -506,6 +528,54 @@ CNC MACHINING RULES:
                 except Exception as e:
                     result["error_reading_content"] = str(e)
                     
+            return result
+        
+        elif tool_name in ("search_parts", "download_part_cad"):
+            # Parts search with x402 payment - handle tool calls
+            if not PARTS_SEARCH_AVAILABLE or handle_parts_search_tool_call is None:
+                return {"error": "Parts search tool not available. Install x402: pip install x402 eth-account"}
+            
+            import os
+            private_key = os.getenv("X402_AGENT_PRIVATE_KEY")
+            result = await handle_parts_search_tool_call(
+                tool_name=tool_name,
+                arguments=arguments,
+                private_key=private_key,
+            )
+            
+            # AUTO-STORE MEMORY: Store parts search results
+            if result.get("success") and self.backend_client:
+                try:
+                    if tool_name == "search_parts":
+                        query = arguments.get("query", "")
+                        count = result.get("count", 0)
+                        results_preview = result.get("results", [])[:3]
+                        memory_content = f"""**Parts Search: "{query}"**
+
+**Results found:** {count}
+
+**Top results:**
+"""
+                        for r in results_preview:
+                            memory_content += f"- {r.get('part_number', 'N/A')}: {r.get('name', 'Unknown')} (${r.get('price', 'N/A')})\n"
+                        
+                        await self.backend_client.store_memory(
+                            job_id=self.job_id,
+                            key=f"parts_search_{query[:20].replace(' ', '_')}",
+                            value=memory_content,
+                            category="observation"
+                        )
+                    elif tool_name == "download_part_cad":
+                        part_number = arguments.get("part_number", "")
+                        await self.backend_client.store_memory(
+                            job_id=self.job_id,
+                            key=f"cad_download_{part_number}",
+                            value=f"Downloaded CAD for part {part_number} via x402 payment",
+                            category="observation"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to store parts search memory: {e}")
+            
             return result
         
         else:

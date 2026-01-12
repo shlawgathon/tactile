@@ -15,4 +15,6 @@ dependencies = [
     "motor>=3.3.0",
     "pymongo>=4.6.0",
     "cairosvg>=2.7.0",
+    "x402>=0.1.0",
+    "eth-account>=0.10.0",
 ]
